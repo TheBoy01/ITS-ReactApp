@@ -1,3 +1,24 @@
-@tailwind base; 
-@tailwind components; 
+@tailwind base;
+@tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    @apply p-0 m-0 bg-gray-100; /* change bg-gray-100 to any Tailwind color */
+  }
+}
+@keyframes shimmer {
+  0% {
+    background-position: -500px 0;
+  }
+  100% {
+    background-position: 500px 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%);
+  background-size: 1000px 100%;
+  animation: shimmer 1.3s infinite linear;
+}

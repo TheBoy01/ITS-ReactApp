@@ -1,9 +1,7 @@
-import React from "react";
-
 export default function AuthCard({ children }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md bg-white rounded-lg shadow-md border p-8">
+    <div className="flex items-center justify-center min-h-screen px-4 bg-gray-100">
+      <div className="w-full max-w-md p-10 bg-white border border-gray-200 rounded-lg shadow-md">
         {children}
       </div>
     </div>

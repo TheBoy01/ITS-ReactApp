@@ -1,12 +1,9 @@
-import React from "react";
-
-export default function Button({ children, onClick, type = "button", className = "", ...rest }) {
+export default function Button({ children, className = "", ...props }) {
   return (
     <button
-      type={type}
-      onClick={onClick}
-      className={`inline-flex items-center justify-center px-6 py-3 rounded-full text-white bg-teal-700 hover:bg-teal-800 focus:outline-none ${className}`}
-      {...rest}
+      className={`bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 
+                  rounded-md text-sm font-medium transition w-full ${className}`}
+      {...props}
     >
       {children}
     </button>
