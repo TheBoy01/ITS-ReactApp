@@ -17,15 +17,37 @@ export async function createTicket(payload) {
   }
 }
 
-export const getTicketListByUserID = async (userIDNo) => {
+export const getTicketListByUserID = async () => {
   try {
-    const response = await api.get("/api/Ticket/GetCreatedTicketList", {
-      params: { userIDNo }, // <-- send as query parameter
-    });
+    const response = await api.get("/api/Ticket/GetCreatedTicketList");
 
     return response.data;
   } catch (error) {
     console.error("Error fetching ticket list:", error);
     throw error.response?.data || error;
+  }
+};
+
+export const getTicketNotificationListByUser = async () => {
+  try {
+    const response = await api.get("/api/Ticket/GetNotificationListByUser");
+
+    return response.data.filter((a) => a.moduleCode === "TKT");
+  } catch (error) {
+    console.error("Error fetching ticket list:", error);
+    throw error.response?.data || error;
+  }
+};
+
+/* 🔔 MARK NOTIFICATION AS READ */
+//=>> UPDATE AS READ PER NOTIF
+//export const markNotificationAsRead = async (notificationID) => {
+//await api.put(`/Ticket/notifications/${notificationID}/read`);
+export const markNotificationAsRead = async () => {
+  try {
+    alert("Update notif");
+    await api.put(`/api/Ticket/MarkAllAsRead`);
+  } catch (error) {
+    console.log(error);
   }
 };

@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { getReferenceLists } from "../../API/ReferencesAPI";
-import { createTicket, getTicketListByUserID } from "../../API/TicketAPI";
+import {
+  createTicket,
+  getTicketListByUserID,
+  getTicketNotificationListByUser,
+  markNotificationAsRead,
+} from "../../API/TicketAPI";
 import SkeletonTicketPage from "../skeletons/SkeletonTicketPage";
 import {
   SwalSuccess,
@@ -15,6 +20,7 @@ import {
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { format } from "date-fns";
+import { createNotificationConnection } from "../../signalr/notificationConnection";
 
 export default function TicketPage() {
   const { user, logout } = useAuth();
@@ -23,12 +29,9 @@ export default function TicketPage() {
   const [refSuppCategory, setSupportCategories] = useState([]);
   const [refSupportMarking, setMarkings] = useState([]);
   const [tickets, setTickets] = useState([]);
-  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [ticketLoading, setTicketLoading] = useState(true);
-
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   const [formData, setFormData] = useState({
     supportStatus: "NW",
@@ -51,6 +54,11 @@ export default function TicketPage() {
   // Expanded rows for small screens
   const [expandedRows, setExpandedRows] = useState([]);
 
+  // Notifications
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const notifRef = useRef(null);
   // ----------------- Load References -----------------
   useEffect(() => {
     const loadReferences = async () => {
@@ -75,11 +83,6 @@ export default function TicketPage() {
       try {
         const list = await getTicketListByUserID(user.empID);
         setTickets(list || []);
-
-        const notifs = list
-          .filter((t) => t.hasUnreadUpdate)
-          .map((t) => ({ ...t, isRead: false }));
-        setNotifications(notifs);
       } catch (err) {
         SwalError("Failed to load tickets", "Please try again later.");
         console.error(err);
@@ -90,6 +93,95 @@ export default function TicketPage() {
 
     if (activeTab === "list") fetchTickets();
   }, [activeTab, user.empID]);
+
+  // ----------------- Notifications ------------------
+  /* -------------------- LOAD NOTIFICATIONS (LOGIN) -------------------- */
+  useEffect(() => {
+    if (!user?.empID) return;
+
+    const loadNotifications = async () => {
+      try {
+        const data = (await getTicketNotificationListByUser()) || [];
+
+        // Keep all notifications for dropdown
+        setNotifications(data);
+
+        // Compute bell count: tickets with unread notifications
+        const updatesByTicket = {};
+        data
+          .filter((n) => !n.isRead)
+          .forEach((n) => {
+            updatesByTicket[n.taskID] = (updatesByTicket[n.taskID] || 0) + 1;
+          });
+
+        // Show toast for each ticket
+        Object.entries(updatesByTicket)
+          .filter(([taskID, count]) => count > 0)
+          .forEach(([taskID, count]) => {
+            ToastInfo(`You have ${count} update(s) in Ticket #AUS00${taskID}`);
+          });
+      } catch (err) {
+        console.error("Failed to load notifications", err);
+      }
+    };
+
+    loadNotifications();
+  }, [user.empID]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    };
+
+    if (showNotifications) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showNotifications]);
+
+  /* -------------------- SIGNALR (REALTIME) -------------------- */
+  useEffect(() => {
+    if (!user?.empID || !user?.token) return;
+
+    const connection = createNotificationConnection(user.token);
+
+    connection.on("ReceiveNotification", (notif) => {
+      ToastInfo(notif.message);
+
+      setNotifications((prev) => [{ ...notif, isRead: false }, ...prev]);
+    });
+
+    connection
+      .start()
+      .then(() => connection.invoke("JoinUser", user.empID))
+      .catch((err) => console.error("SignalR error", err));
+
+    return () => connection.stop();
+  }, [user.empID, user.token]);
+
+  /* -------------------- CLICK NOTIFICATION -------------------- */
+  const handleNotificationClick = async (notif) => {
+    //setNotifications((prev) =>
+    // prev.map((n) =>
+    //   n.notificationID === notif.notificationID ? { ...n, isRead: true } : n
+    //   )
+    // );
+
+    setShowNotifications(false);
+    viewTicket(tickets.find((a) => a.ticketIDNo === notif.taskID));
+  };
+
+  const handleNotifBell = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    setShowNotifications(true);
+    if (unreadCount > 0) await markNotificationAsRead();
+  };
+  // ----------------- Notifications Ends ------------------
 
   // ----------------- Logout -----------------
   const handleLogout = async () => {
@@ -397,26 +489,58 @@ export default function TicketPage() {
               {/* Header + Notifications */}
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold">My Tickets</h2>
-                <button className="relative p-2 rounded-full hover:bg-gray-100">
-                  <svg
-                    className="w-6 h-6 text-gray-700"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    viewBox="0 0 24 24"
+
+                {/* 🔔 NOTIFICATION BELL */}
+                <div className="relative">
+                  <button
+                    onClick={() => handleNotifBell()}
+                    className="relative p-2 rounded-full hover:bg-gray-100"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 01-6 0"
-                    />
-                  </svg>
-                  {unreadCount > 0 && (
-                    <span className="absolute flex items-center justify-center w-4 h-4 text-xs text-white bg-red-600 rounded-full top-1 right-1">
-                      {unreadCount}
-                    </span>
+                    🔔
+                    {unreadCount > 0 && (
+                      <span className="absolute top-0 right-0 flex items-center justify-center w-4 h-4 text-xs text-white bg-red-600 rounded-full">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {showNotifications && (
+                    <div
+                      className="absolute right-0 z-50 mt-2 bg-white border rounded shadow w-80"
+                      ref={notifRef}
+                    >
+                      <div className="px-4 py-2 font-semibold border-b">
+                        Notifications
+                      </div>
+
+                      {notifications.length === 0 ? (
+                        <div className="px-4 py-3 text-sm text-gray-500">
+                          No notifications
+                        </div>
+                      ) : (
+                        <ul className="overflow-y-auto max-h-64">
+                          {notifications.map((n) => (
+                            <li
+                              key={n.notificationID} // use the unique ID from backend
+                              onClick={() => handleNotificationClick(n)}
+                              className={`px-4 py-3 text-sm cursor-pointer hover:bg-gray-100 ${
+                                !n.isRead ? "bg-blue-50" : ""
+                              }`}
+                            >
+                              <div className="font-medium">
+                                Ticket #AUS00{n.taskID} -{" "}
+                                {n.notificationMessage}
+                              </div>
+                              <div className="text-xs text-gray-600">
+                                {n.message}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   )}
-                </button>
+                </div>
               </div>
 
               {/* Search */}
