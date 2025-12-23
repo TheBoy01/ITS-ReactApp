@@ -1,4 +1,4 @@
-export default function SkeletonTicketPage() {
+export default function SkeletonLargeBoxes() {
   return (
     <div className="p-6 space-y-6 animate-pulse">
       {/* Header */}

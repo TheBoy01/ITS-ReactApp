@@ -1,13 +1,20 @@
 import React, { useState, useContext } from "react";
+import { useNavigate } from "react-router-dom";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
 import AuthCard from "../components/layout/AuthCard";
 import AuthContext from "../contexts/AuthContext";
-import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/solid'; // or outline
+import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/solid";
 
 export default function LoginPage() {
-  const { login } = useContext(AuthContext);
-  const [form, setForm] = useState({ username: "", password: "", remember: false });
+  const { login } = useContext(AuthContext); // Remove 'user' from here
+  const navigate = useNavigate();
+
+  const [form, setForm] = useState({
+    username: "",
+    password: "",
+    remember: false,
+  });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -28,24 +35,26 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
-      await login(form.username, form.password, form.remember);
+
+      // ✅ login now returns the user object
+      const authUser = await login(form.username, form.password, form.remember);
+
+      // ✅ Navigate immediately based on role
+      if (authUser.role.toLowerCase() === "admin") {
+        navigate("/admin/dashboard", { replace: true });
+      } else {
+        navigate("/tickets", { replace: true });
+      }
     } catch (err) {
       setError(err.response?.data || err.message || "Login failed");
-    } finally {
-      setLoading(false);
+      setLoading(false); // Only set loading false on error
     }
+    // Don't set loading to false in finally - let the navigation happen
   };
 
   return (
     <AuthCard>
-      {/* Title */}
       <h1 className="mb-1 font-serif text-4xl text-gray-800">Log in</h1>
-      <p className="mb-6 text-sm text-gray-600">
-        Need an account?{" "}
-        <a className="text-teal-600 underline cursor-pointer">Create an account</a>
-      </p>
-
-      {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-5">
         <Input
           label="Username or Email"
@@ -55,7 +64,6 @@ export default function LoginPage() {
           placeholder="Enter username or email"
         />
 
-        {/* Password field */}
         <div className="relative mt-1">
           <input
             name="password"
@@ -65,7 +73,6 @@ export default function LoginPage() {
             className="w-full px-4 py-3 pr-10 transition border rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Enter your password"
           />
-
           <button
             type="button"
             onClick={() => setShowPassword((s) => !s)}
@@ -77,9 +84,8 @@ export default function LoginPage() {
               <EyeIcon className="w-5 h-5" />
             )}
           </button>
-      </div>
+        </div>
 
-        {/* Remember me */}
         <div className="flex items-center space-x-2">
           <input
             type="checkbox"
@@ -91,19 +97,11 @@ export default function LoginPage() {
           <label className="text-sm text-gray-700">Keep me logged in</label>
         </div>
 
-        {/* Error */}
         {error && <div className="text-sm text-red-600">{error}</div>}
 
-        {/* Button */}
         <Button type="submit" disabled={loading}>
           {loading ? "Logging in..." : "Log in"}
         </Button>
-
-        {/* Links */}
-        <div className="flex justify-between mt-3 text-sm">
-          <a className="text-teal-600 cursor-pointer hover:underline">Forgot username?</a>
-          <a className="text-teal-600 cursor-pointer hover:underline">Forgot password?</a>
-        </div>
       </form>
     </AuthCard>
   );

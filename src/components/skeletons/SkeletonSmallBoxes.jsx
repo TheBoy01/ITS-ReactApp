@@ -1,4 +1,4 @@
-export default function SkeletonVerifyIDNo() {
+export default function SkeletonSmallBoxes() {
   return (
     <div className="space-y-4 animate-pulse">
       {/* Title */}

@@ -1,4 +1,11 @@
-import React, { createContext, useState, useEffect, useContext } from "react";
+import React, {
+  createContext,
+  useState,
+  useEffect,
+  useContext,
+  useMemo,
+  useCallback,
+} from "react";
 import { jwtDecode } from "jwt-decode";
 import api from "../API/api";
 import { SwalError } from "../utils/SwalAlert";
@@ -10,28 +17,46 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Logout function - use useCallback to memoize it
+  const logout = useCallback(() => {
+    localStorage.removeItem("accessToken");
+    setUser(null);
+    setToken(null);
+  }, []);
+
   // Initialize user from localStorage
   useEffect(() => {
     const savedToken = localStorage.getItem("accessToken");
     if (savedToken) {
       try {
         const payload = jwtDecode(savedToken);
-        setUser({
-          empID: payload.EmpID,
+
+        // Check if token is already expired
+        const now = Date.now() / 1000;
+        if (payload.exp && payload.exp < now) {
+          localStorage.removeItem("accessToken");
+          setLoading(false);
+          return;
+        }
+        const authUser = {
+          empID: payload.EmpID || payload.nameid,
           email: payload.email,
           name: payload.unique_name || payload.name || payload.sub,
           role: payload.Role || payload.role,
           exp: payload.exp,
-        });
+        };
+
+        setUser(authUser);
         setToken(savedToken);
-      } catch {
+      } catch (error) {
+        console.error("Token decode error:", error);
         localStorage.removeItem("accessToken");
       }
     }
     setLoading(false);
   }, []);
 
-  // Auto-logout exactly when token expires
+  // Auto-logout when token expires
   useEffect(() => {
     if (!user?.exp) return;
 
@@ -56,60 +81,87 @@ export const AuthProvider = ({ children }) => {
     }, timeLeft * 1000);
 
     return () => clearTimeout(timer);
-  }, [user]);
+  }, [user?.exp, logout]); // Now logout is stable
 
   // Admin login
-  const login = async (username, password, remember = false) => {
-    const resp = await api.post("/api/auth/login", { username, password });
-    const token = resp.data.token;
-    if (!token) SwalError("Error", "Token missing"); // throw new Error("Token missing");
+  const login = useCallback(async (username, password, remember = false) => {
+    try {
+      const resp = await api.post("/api/auth/login", { username, password });
+      const token = resp.data.token;
 
-    localStorage.setItem("accessToken", token);
-    const payload = jwtDecode(token);
-    const authUser = {
-      empID: payload.EmpID,
-      email: payload.email,
-      name: payload.unique_name || payload.name || payload.sub,
-      role: payload.Role || payload.role,
-      exp: payload.exp,
-    };
-    setUser(authUser);
-    setToken(token);
-  };
+      if (!token) {
+        SwalError("Error", "Token missing");
+        throw new Error("Token missing");
+      }
+
+      localStorage.setItem("accessToken", token);
+      const payload = jwtDecode(token);
+
+      const authUser = {
+        empID: payload.EmpID || payload.nameid,
+        email: payload.email,
+        name: payload.unique_name || payload.name || payload.sub,
+        role: payload.Role || payload.role,
+        exp: payload.exp,
+      };
+
+      setUser(authUser);
+      setToken(token);
+
+      return authUser;
+    } catch (error) {
+      console.error("Login error:", error);
+      throw error;
+    }
+  }, []);
 
   // Employee login / verify IDNo
-  const createToken = (token) => {
-    localStorage.setItem("accessToken", token);
-    const payload = jwtDecode(token);
-    const authUser = {
-      name: payload.unique_name || payload.name || payload.sub,
-      empID: payload.EmpID,
-      email: payload.email,
-      role: payload.role,
-      exp: payload.exp,
-    };
-    setUser(authUser);
-    setToken(token);
-    return authUser;
-  };
+  const createToken = useCallback((token) => {
+    try {
+      localStorage.setItem("accessToken", token);
+      const payload = jwtDecode(token);
 
-  // Logout
-  const logout = () => {
-    localStorage.removeItem("accessToken");
-    setUser(null);
-    setToken(null);
-  };
+      const authUser = {
+        empID: payload.EmpID || payload.nameid,
+        email: payload.email,
+        name: payload.unique_name || payload.name || payload.sub,
+        role: payload.Role || payload.role,
+        exp: payload.exp,
+      };
 
-  return (
-    <AuthContext.Provider
-      value={{ user, token, loading, login, createToken, logout }}
-    >
-      {children}
-    </AuthContext.Provider>
+      setUser(authUser);
+      setToken(token);
+
+      return authUser;
+    } catch (error) {
+      console.error("Token creation error:", error);
+      throw error;
+    }
+  }, []);
+
+  // Memoize context value to prevent unnecessary re-renders
+  const value = useMemo(
+    () => ({
+      user,
+      token,
+      loading,
+      login,
+      createToken,
+      logout,
+    }),
+    [user, token, loading, login, createToken, logout]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 // Custom hook
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+};
 
 export default AuthContext;

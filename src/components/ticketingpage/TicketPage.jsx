@@ -7,7 +7,7 @@ import {
   getTicketNotificationListByUser,
   markNotificationAsRead,
 } from "../../API/TicketAPI";
-import SkeletonTicketPage from "../skeletons/SkeletonTicketPage";
+import SkeletonLargeBoxes from "../skeletons/SkeletonLargeBoxes";
 import {
   SwalSuccess,
   SwalError,
@@ -32,7 +32,6 @@ export default function TicketPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [ticketLoading, setTicketLoading] = useState(true);
-
   const [formData, setFormData] = useState({
     supportStatus: "NW",
     supportCategory: "",
@@ -163,6 +162,15 @@ export default function TicketPage() {
 
     return () => connection.stop();
   }, [user.empID, user.token]);
+
+  useEffect(() => {
+    if (!user?.role) return;
+
+    if (user.role.toLowerCase() === "admin") {
+      //ToastError("Invalid user credentials. Please login again.");
+      logout();
+    }
+  }, [user?.role]);
 
   /* -------------------- CLICK NOTIFICATION -------------------- */
   const handleNotificationClick = async (notif) => {
@@ -367,7 +375,7 @@ export default function TicketPage() {
     );
   };
 
-  if (loading) return <SkeletonTicketPage />;
+  if (loading) return <SkeletonLargeBoxes />; //<SkeletonLargeBoxes />;
 
   return (
     <div className="p-6">
@@ -555,7 +563,7 @@ export default function TicketPage() {
               </div>
 
               {ticketLoading ? (
-                <SkeletonTicketPage />
+                <SkeletonLargeBoxes />
               ) : tickets.length === 0 ? (
                 <p className="text-center text-gray-500">No tickets found.</p>
               ) : (

@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { verifyUser } from "../../API/auth";
 import { useAuth } from "../../contexts/AuthContext";
-import SkeletonVerifyIDNo from "../skeletons/SkeletonVerifyIDNo";
+//import SkeletonVerifyIDNo from "../skeletons/SkeletonVerifyIDNo";
+import SkeletonSmallBoxes from "../skeletons/SkeletonSmallBoxes";
 import {
   SwalSuccess,
   SwalError,
@@ -50,7 +51,7 @@ export default function VerifyIDNo({ formData, handleChange }) {
 
   // ✅ FULL DIV SKELETON
   if (loading) {
-    return <SkeletonVerifyIDNo />;
+    return <SkeletonSmallBoxes />;
   }
 
   return (
