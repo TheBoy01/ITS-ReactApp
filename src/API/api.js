@@ -1,6 +1,8 @@
 import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "https://localhost:7100";
+const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  "https://aus-itsystem-dcecfahra7dxe6gj.polandcentral-01.azurewebsites.net"; //"https://localhost:7100";
 
 const api = axios.create({
   baseURL: API_BASE,
