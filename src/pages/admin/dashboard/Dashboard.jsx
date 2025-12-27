@@ -1,4 +1,6 @@
 import { React, useEffect, useState } from "react";
+import { useReferenceData } from "../../../contexts/GetDashboardRefData";
+import SkeletonLargeBoxes from "../../../components/skeletons/SkeletonLargeBoxes";
 
 const HomeIcon = () => (
   <svg
@@ -89,6 +91,30 @@ const StatsCard = ({ title, value, change, icon: Icon, color }) => {
 };
 
 const Dashboard = () => {
+  const { TeacherPerformanceData, loading } = useReferenceData();
+
+  const { teacherPerformanceInfoList = [], tblObsCommentsList = [] } =
+    TeacherPerformanceData;
+
+  const getActiveTeacherChangePercent = (teachers) => {
+    const today = new Date();
+
+    const joinedTeachers = teachers.filter(
+      (t) => new Date(t.joinDate) <= today
+    );
+
+    const totalJoined = joinedTeachers.length;
+    const activeTeachers = joinedTeachers.filter((t) => t.isActive).length;
+
+    if (totalJoined === 0) return 0;
+
+    return Math.round(((activeTeachers - totalJoined) / totalJoined) * 100);
+  };
+
+  if (loading) {
+    return <SkeletonLargeBoxes />;
+  }
+
   const stats = [
     {
       title: "Total Tickets",
@@ -106,7 +132,9 @@ const Dashboard = () => {
     },
     {
       title: "Active Teachers",
-      value: "89",
+      value: teacherPerformanceInfoList
+        .filter((a) => a.status?.toUpperCase() === "ACTIVE")
+        .length.toString(),
       change: -2,
       icon: UsersIcon,
       color: "bg-purple-500 text-white",

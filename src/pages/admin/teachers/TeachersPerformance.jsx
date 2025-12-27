@@ -105,6 +105,7 @@ const ChevronDownIcon = () => (
 );
 
 // Sample teacher data
+/*
 const teachersData = [
   {
     id: 1,
@@ -235,51 +236,62 @@ const teachersData = [
     image: "WB",
   },
 ];
+*/
 
 const TeachersPerformance = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("All");
-  const [selectedGrade, setSelectedGrade] = useState("All");
+  const [selectedSubject, setSelectedSubject] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
   const [showFilters, setShowFilters] = useState(false);
   const [selectedTeacher, setSelectedTeacher] = useState(null);
   const { TeacherPerformanceData, loading } = useReferenceData();
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isPerformanceExpanded, setIsPerformanceExpanded] = useState(false);
 
-  // Get unique departments and grades
+  const { teacherPerformanceInfoList = [], tblPerformanceOverview = [] } =
+    TeacherPerformanceData;
+
+  // Get unique departments
   const departments = [
     "All",
-    ...new Set(teachersData.map((t) => t.department)),
+    ...new Set(teacherPerformanceInfoList.map((t) => t.department)),
   ];
-  const grades = ["All", ...new Set(teachersData.map((t) => t.grade))];
-  const statuses = ["All", "Active", "On Leave"];
+  const subjects = [
+    "All",
+    ...new Set(teacherPerformanceInfoList.map((t) => t.subject)),
+  ];
+  const statuses = [
+    "All",
+    ...new Set(teacherPerformanceInfoList.map((t) => t.status)),
+  ];
 
   // Filter teachers
-  const filteredTeachers = teachersData.filter((teacher) => {
+  const filteredTeachers = teacherPerformanceInfoList.filter((teacher) => {
     const matchesSearch =
-      teacher.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      teacher.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      teacher.subject.toLowerCase().includes(searchTerm.toLowerCase());
+      teacher.empName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      teacher.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      teacher.department.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDepartment =
       selectedDepartment === "All" || teacher.department === selectedDepartment;
-    const matchesGrade =
-      selectedGrade === "All" || teacher.grade === selectedGrade;
+    const matchesSubject =
+      selectedSubject === "All" || teacher.subject === selectedSubject;
     const matchesStatus =
       selectedStatus === "All" || teacher.status === selectedStatus;
 
-    return matchesSearch && matchesDepartment && matchesGrade && matchesStatus;
+    return (
+      matchesSearch && matchesDepartment && matchesSubject && matchesStatus
+    );
   });
 
-  const { teacherPerformanceInfoList = [], tblObsCommentsList = [] } =
-    TeacherPerformanceData;
   // Calculate stats
-  const totalTeachers = teacherPerformanceInfoList.length;
+  const totalTeachers = filteredTeachers.length;
   const avgRating = (
-    teacherPerformanceInfoList.reduce((sum, t) => sum + t.averageRating, 0) /
+    filteredTeachers.reduce((sum, t) => sum + t.averageRating, 0) /
     totalTeachers
   ).toFixed(1);
   const avgAttendance = Math.round(
-    teacherPerformanceInfoList.reduce((sum, t) => sum + t.attendance, 0) /
-      totalTeachers
+    filteredTeachers.reduce((sum, t) => sum + t.attendance, 0) / totalTeachers
   );
   const totalStudents = filteredTeachers.reduce(
     (sum, t) => sum + t.studentsCount,
@@ -294,6 +306,15 @@ const TeachersPerformance = () => {
         ))}
       </div>
     );
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    const options = {
+      year: "numeric",
+      month: "long",
+    };
+    return date.toLocaleDateString("en-US", options);
   };
 
   if (loading) return <SkeletonLargeBoxes />;
@@ -465,16 +486,16 @@ const TeachersPerformance = () => {
 
             <div>
               <label className="block mb-2 text-sm font-medium text-slate-700">
-                Grade
+                Subject
               </label>
               <select
-                value={selectedGrade}
-                onChange={(e) => setSelectedGrade(e.target.value)}
+                value={selectedSubject}
+                onChange={(e) => setSelectedSubject(e.target.value)}
                 className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {grades.map((grade) => (
-                  <option key={grade} value={grade}>
-                    {grade}
+                {subjects.map((subject) => (
+                  <option key={subject} value={subject}>
+                    {subject}
                   </option>
                 ))}
               </select>
@@ -530,7 +551,7 @@ const TeachersPerformance = () => {
               </tr>
             </thead>
             <tbody>
-              {teacherPerformanceInfoList.map((teacher) => {
+              {filteredTeachers.map((teacher) => {
                 //  const progressPercentage = Math.round(
                 // (teacher.classesCompleted / teacher.totalClasses) * 100
                 //  );
@@ -622,118 +643,251 @@ const TeachersPerformance = () => {
 
       {/* Teacher Detail Modal */}
       {selectedTeacher && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-2xl font-bold text-slate-800">
-                  Teacher Details
-                </h3>
-                <button
-                  onClick={() => setSelectedTeacher(null)}
-                  className="p-2 transition-colors rounded-lg hover:bg-slate-100"
-                >
-                  <svg
-                    className="w-6 h-6"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+        <div className="flex items-center justify-center min-h-screen p-4 bg-slate-100">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-2xl font-bold text-slate-800">
+                    Teacher Details
+                  </h3>
+                  <button
+                    onClick={() => setSelectedTeacher(null)}
+                    className="p-2 transition-colors rounded-lg hover:bg-slate-100"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-4 pb-6 mb-6 border-b border-slate-200">
-                <div className="flex items-center justify-center w-20 h-20 text-2xl font-semibold text-white bg-blue-600 rounded-full">
-                  {selectedTeacher.image}
+                    <svg
+                      className="w-6 h-6"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
                 </div>
-                <div className="flex-1">
-                  <h4 className="text-xl font-semibold text-slate-800">
-                    {selectedTeacher.name}
-                  </h4>
-                  <p className="text-slate-600">{selectedTeacher.email}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    {renderStars(selectedTeacher.rating)}
-                    <span className="text-sm text-slate-600">
-                      ({selectedTeacher.rating})
-                    </span>
+
+                <div className="flex items-center gap-4 pb-6 mb-6 border-b border-slate-200">
+                  <div className="flex items-center justify-center w-20 h-20 text-2xl font-semibold text-white bg-blue-600 rounded-full">
+                    {selectedTeacher.image}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-xl font-semibold text-slate-800">
+                      {selectedTeacher.empName}
+                    </h4>
+                    <p className="text-slate-600">{selectedTeacher.position}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      {renderStars(selectedTeacher.averageRating)}
+                      <span className="text-sm text-slate-600">
+                        (Overall Rating)
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <p className="mb-1 text-sm text-slate-600">Subject</p>
-                  <p className="font-semibold text-slate-800">
-                    {selectedTeacher.subject}
-                  </p>
+                {/* Joined Date - Always Visible */}
+                <div className="pb-4 mb-6">
+                  <div className="mb-4">
+                    <p className="mb-1 text-sm text-slate-600">Joined Date</p>
+                    <p className="font-semibold text-slate-800">
+                      {formatDate(selectedTeacher.joinedDate)}
+                    </p>
+                  </div>
+
+                  {/* Performance Comments Section */}
+                  <div className="pt-4 border-t border-slate-200">
+                    <button
+                      onClick={() =>
+                        setIsPerformanceExpanded(!isPerformanceExpanded)
+                      }
+                      className="flex items-center justify-between w-full p-3 transition-colors rounded-lg hover:bg-slate-50"
+                    >
+                      <span className="font-semibold text-slate-800">
+                        Performance Comments
+                      </span>
+                      <svg
+                        className={`w-5 h-5 text-slate-600 transition-transform duration-300 ${
+                          isPerformanceExpanded ? "rotate-180" : ""
+                        }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M19 9l-7 7-7-7"
+                        />
+                      </svg>
+                    </button>
+
+                    <div
+                      className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                        isPerformanceExpanded
+                          ? "max-h-[1000px] opacity-100"
+                          : "max-h-0 opacity-0"
+                      }`}
+                    >
+                      {selectedTeacher.performanceManager ? (
+                        <div className="pt-4 space-y-4">
+                          <div>
+                            <p className="mb-1 text-sm text-slate-600">
+                              Performance Manager
+                            </p>
+                            <p className="font-semibold text-slate-800">
+                              {selectedTeacher.performanceManager}
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-4">
+                            <div>
+                              <p className="mb-1 text-sm text-slate-600">
+                                Teaching Quality
+                              </p>
+                              <p className="font-semibold text-slate-800">
+                                {selectedTeacher.teachingQuality}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="mb-1 text-sm text-slate-600">
+                                Response to Students
+                              </p>
+                              <p className="font-semibold text-slate-800">
+                                {selectedTeacher.responseToStudents}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="mb-1 text-sm text-slate-600">
+                                Contributed to School
+                              </p>
+                              <p className="font-semibold text-slate-800">
+                                {selectedTeacher.contribToSchool}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="py-8 text-center text-slate-500">
+                          No Data Found
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="mb-1 text-sm text-slate-600">Department</p>
-                  <p className="font-semibold text-slate-800">
-                    {selectedTeacher.department}
-                  </p>
-                </div>
-                <div>
-                  <p className="mb-1 text-sm text-slate-600">Grade Level</p>
-                  <p className="font-semibold text-slate-800">
-                    {selectedTeacher.grade}
-                  </p>
-                </div>
-                <div>
-                  <p className="mb-1 text-sm text-slate-600">Students</p>
-                  <p className="font-semibold text-slate-800">
-                    {selectedTeacher.studentsCount}
-                  </p>
-                </div>
-                <div>
-                  <p className="mb-1 text-sm text-slate-600">Attendance Rate</p>
-                  <p className="font-semibold text-slate-800">
-                    {selectedTeacher.attendance}%
-                  </p>
-                </div>
-                <div>
-                  <p className="mb-1 text-sm text-slate-600">
-                    Classes Progress
-                  </p>
-                  <p className="font-semibold text-slate-800">
-                    {selectedTeacher.classesCompleted}/
-                    {selectedTeacher.totalClasses}
-                  </p>
-                </div>
-                <div>
-                  <p className="mb-1 text-sm text-slate-600">Status</p>
-                  <span
-                    className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
-                      selectedTeacher.status === "Active"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-orange-100 text-orange-800"
+
+                {/* Performance Overview Section with Dropdown */}
+                <div className="pt-4 border-t border-slate-200">
+                  <button
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className="flex items-center justify-between w-full p-3 transition-colors rounded-lg hover:bg-slate-50"
+                  >
+                    <span className="font-semibold text-slate-800">
+                      Performance Overview
+                    </span>
+                    <svg
+                      className={`w-5 h-5 text-slate-600 transition-transform duration-300 ${
+                        isExpanded ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </button>
+
+                  <div
+                    className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                      isExpanded
+                        ? "max-h-[1000px] opacity-100"
+                        : "max-h-0 opacity-0"
                     }`}
                   >
-                    {selectedTeacher.status}
-                  </span>
+                    <div className="pt-4">
+                      {selectedTeacher.tblPerformanceOverview &&
+                      selectedTeacher.tblPerformanceOverview.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse">
+                            <thead>
+                              <tr className="bg-slate-100">
+                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                  Class
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                  Subject
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                  Topic
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                  Observer Name
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                  Performance Rating
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                  Clear Progress Demo
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                  Demand Placed
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                  Effective Plenary
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedTeacher.tblPerformanceOverview.map(
+                                (row, index) => (
+                                  <tr key={index} className="hover:bg-slate-50">
+                                    <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
+                                      {row.class || "-"}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
+                                      {row.subject || "-"}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
+                                      {row.topic || "-"}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
+                                      {row.observerName || "-"}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
+                                      {row.performanceRating || "-"}
+                                    </td>
+                                    <td className="max-w-xs px-4 py-3 text-sm border-b text-slate-700 border-slate-200">
+                                      {row.clearProgressDemo || "-"}
+                                    </td>
+                                    <td className="max-w-xs px-4 py-3 text-sm border-b text-slate-700 border-slate-200">
+                                      {row.demandPlaced || "-"}
+                                    </td>
+                                    <td className="max-w-xs px-4 py-3 text-sm border-b text-slate-700 border-slate-200">
+                                      {row.effectivePlenary || "-"}
+                                    </td>
+                                  </tr>
+                                )
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="py-8 text-center text-slate-500">
+                          No Data Found
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="mb-1 text-sm text-slate-600">Join Date</p>
-                  <p className="font-semibold text-slate-800">
-                    {new Date(selectedTeacher.joinDate).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-6 mt-6 border-t border-slate-200">
-                <button className="flex-1 px-4 py-2 text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700">
-                  View Full Profile
-                </button>
-                <button className="flex-1 px-4 py-2 transition-colors rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800">
-                  Send Message
-                </button>
               </div>
             </div>
           </div>
