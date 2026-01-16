@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import VerifyIDNo from "../components/ticketingpage/VerifyIDNo";
 import TicketForm from "../components/ticketingpage/TicketPage";
@@ -6,7 +7,8 @@ import LoginPage from "./LoginPage";
 import TicketingSkeleton from "../components/skeletons/TicketingSkeleton";
 
 export default function TicketingPage() {
-  const { token, loading, user } = useAuth();
+  const { token, loading, user, authType } = useAuth();
+  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     EmpID: "",
@@ -18,6 +20,13 @@ export default function TicketingPage() {
     EmailID: "",
   });
 
+  // Redirect admin to dashboard if they try to access ticket page
+  useEffect(() => {
+    if (!loading && authType === "admin") {
+      navigate("/admin/dashboard", { replace: true });
+    }
+  }, [loading, authType, navigate]);
+
   const handleChange = (e) => {
     setFormData((prev) => ({
       ...prev,
@@ -25,8 +34,13 @@ export default function TicketingPage() {
     }));
   };
 
-  // ✅ Show skeleton while auth is loading
+  // Show skeleton while auth is loading
   if (loading) {
+    return <TicketingSkeleton />;
+  }
+
+  // If admin is logged in, don't render (will redirect)
+  if (authType === "admin") {
     return <TicketingSkeleton />;
   }
 
@@ -42,12 +56,9 @@ export default function TicketingPage() {
       {/* CONTENT */}
       <div className="flex flex-col items-center px-4 py-6 sm:py-8">
         <div className="w-auto p-10 pt-2 -mt-12 bg-white shadow-lg rounded-xl">
+          {/* Only show VerifyIDNo or TicketForm - remove LoginPage from here */}
           {token ? (
-            user?.role === "ITD" ? (
-              <LoginPage />
-            ) : (
-              <TicketForm user={user} />
-            )
+            <TicketForm user={user} />
           ) : (
             <VerifyIDNo formData={formData} handleChange={handleChange} />
           )}

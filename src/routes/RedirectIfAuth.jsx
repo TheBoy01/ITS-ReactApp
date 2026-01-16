@@ -1,22 +1,33 @@
-// RedirectIfAuth.jsx
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
-export default function RedirectIfAuth({ children }) {
-  const { user, loading } = useAuth();
+const RedirectIfAuth = ({ children }) => {
+  const { user, authType, loading } = useAuth();
 
   if (loading) {
-    return <div>Loading...</div>; // Or your loading component
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
   }
 
-  // If user is logged in, redirect based on role
+  // If ANY user is authenticated (admin OR employee), redirect them
   if (user) {
-    if (user.role.toLowerCase() === "admin") {
+    // Admin -> redirect to admin dashboard
+    if (authType === "admin") {
       return <Navigate to="/admin/dashboard" replace />;
     }
-    return <Navigate to="/Ticket" replace />;
+    // Employee -> redirect to ticket page
+    else {
+      return <Navigate to="/Ticket" replace />;
+    }
   }
 
-  // Not logged in, show the login page
+  // Not authenticated, show login page
   return children;
-}
+};
+
+export default RedirectIfAuth;

@@ -1,120 +1,81 @@
-import React from "react";
+import React, { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../../contexts/AuthContext";
 import { SwalConfirm } from "../../../utils/SwalAlert";
-
-const HomeIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-    />
-  </svg>
-);
-
-const TicketIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"
-    />
-  </svg>
-);
-
-const PackageIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-    />
-  </svg>
-);
-
-const UsersIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-    />
-  </svg>
-);
-
-const XIcon = () => (
-  <svg
-    className="w-6 h-6"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M6 18L18 6M6 6l12 12"
-    />
-  </svg>
-);
-
-const LogOutIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-    />
-  </svg>
-);
+import {
+  FaHome,
+  FaTicketAlt,
+  FaBox,
+  FaUsers,
+  FaChevronDown,
+  FaTimes,
+  FaSignOutAlt,
+} from "react-icons/fa";
 
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
+  const [isITSupportOpen, setIsITSupportOpen] = useState(false);
+  const { user, userMenus, authType, logout } = useAuth();
 
-  const menuItems = [
-    { path: "/admin/dashboard", label: "Dashboard", icon: HomeIcon },
-    { path: "/admin/ticketsupport", label: "IT Support", icon: TicketIcon },
-    { path: "/admin/inventory", label: "Inventory", icon: PackageIcon },
-    { path: "/admin/teachers", label: "Teachers", icon: UsersIcon },
+  // Icon mapping for dynamic menus
+  const iconMap = {
+    Dashboard: FaHome,
+    "IT Support": FaTicketAlt,
+    Inventory: FaBox,
+    Teachers: FaUsers,
+  };
+
+  // Default hardcoded menus (for employees or fallback)
+  const defaultMenuItems = [
+    { path: "/admin/dashboard", label: "Dashboard", icon: FaHome },
+    {
+      path: "/admin/tickets",
+      label: "IT Support",
+      icon: FaTicketAlt,
+      submenu: [
+        { path: "/admin/tickets/ticketsupport", label: "Ticket Support" },
+        { path: "/admin/tickets/printid", label: "Print ID's" },
+        { path: "/admin/tickets/closed", label: "Closed Tickets" },
+        { path: "/admin/tickets/create", label: "Create Ticket" },
+      ],
+    },
+    { path: "/admin/inventory", label: "Inventory", icon: FaBox },
+    { path: "/admin/teachers", label: "Teachers", icon: FaUsers },
   ];
-  const { user, logout } = useAuth();
+
+  // Determine which menus to show
+  const getMenuItems = () => {
+    // If admin with menus from backend, use those
+    if (authType === "admin" && userMenus && userMenus.length > 0) {
+      return userMenus.map((menu) => ({
+        path: menu.route,
+        label: menu.menuName,
+        icon: iconMap[menu.menuName] || FaHome,
+        submenu:
+          menu.subMenus && menu.subMenus.length > 0
+            ? menu.subMenus.map((sub) => ({
+                path: sub.route,
+                label: sub.menuName,
+              }))
+            : null,
+      }));
+    }
+
+    // Otherwise use default menus (employee or no menus loaded yet)
+    return defaultMenuItems;
+  };
+
+  const menuItems = getMenuItems();
 
   const handleLogout = async () => {
     const ok = await SwalConfirm("Logout", "Are you sure you want to logout?");
     if (ok) logout();
-    //NavLink("/Ticket", { replace: true }); // Redirect to login
   };
+
+  const toggleITSupport = () => {
+    setIsITSupportOpen(!isITSupportOpen);
+  };
+
   return (
     <>
       {/* Mobile Overlay */}
@@ -136,9 +97,11 @@ const Sidebar = ({ isOpen, onClose }) => {
       >
         {/* Logo */}
         <div className="flex items-center justify-between p-4 border-b border-slate-700">
-          <h1 className="text-xl font-bold">Admin Panel</h1>
+          <h1 className="text-xl font-bold">
+            {authType === "admin" ? "Admin Panel" : "Employee Panel"}
+          </h1>
           <button onClick={onClose} className="lg:hidden">
-            <XIcon />
+            <FaTimes className="w-6 h-6" />
           </button>
         </div>
 
@@ -147,25 +110,87 @@ const Sidebar = ({ isOpen, onClose }) => {
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
+            const hasSubmenu = item.submenu && item.submenu.length > 0;
 
             return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                onClick={onClose}
-                className={`
-                  w-full flex items-center gap-3 px-4 py-3 rounded-lg
-                  transition-colors duration-200
-                  ${
-                    isActive
-                      ? "bg-blue-600 text-white"
-                      : "text-slate-300 hover:bg-slate-800"
-                  }
-                `}
-              >
-                <Icon />
-                <span className="font-medium">{item.label}</span>
-              </NavLink>
+              <div key={item.path}>
+                {hasSubmenu ? (
+                  <>
+                    <button
+                      onClick={toggleITSupport}
+                      className={`
+                        w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg
+                        transition-colors duration-200
+                        ${
+                          isActive || location.pathname.startsWith(item.path)
+                            ? "bg-blue-600 text-white"
+                            : "text-slate-300 hover:bg-slate-800"
+                        }
+                      `}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Icon className="w-5 h-5" />
+                        <span className="font-medium">{item.label}</span>
+                      </div>
+                      <FaChevronDown
+                        className={`w-4 h-4 transform transition-transform duration-200 ${
+                          isITSupportOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {/* Submenu */}
+                    <div
+                      className={`
+                        overflow-hidden transition-all duration-300 ease-in-out
+                        ${isITSupportOpen ? "max-h-48 mt-1" : "max-h-0"}
+                      `}
+                    >
+                      <div className="ml-4 space-y-1">
+                        {item.submenu.map((subItem) => {
+                          const isSubActive =
+                            location.pathname === subItem.path;
+                          return (
+                            <NavLink
+                              key={subItem.path}
+                              to={subItem.path}
+                              onClick={onClose}
+                              className={`
+                                block px-4 py-2 rounded-lg text-sm
+                                transition-colors duration-200
+                                ${
+                                  isSubActive
+                                    ? "bg-blue-500 text-white"
+                                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                                }
+                              `}
+                            >
+                              {subItem.label}
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <NavLink
+                    to={item.path}
+                    onClick={onClose}
+                    className={`
+                      w-full flex items-center gap-3 px-4 py-3 rounded-lg
+                      transition-colors duration-200
+                      ${
+                        isActive
+                          ? "bg-blue-600 text-white"
+                          : "text-slate-300 hover:bg-slate-800"
+                      }
+                    `}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span className="font-medium">{item.label}</span>
+                  </NavLink>
+                )}
+              </div>
             );
           })}
         </nav>
@@ -174,21 +199,20 @@ const Sidebar = ({ isOpen, onClose }) => {
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-700">
           <div className="flex items-center gap-3 mb-3">
             <div className="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-full">
-              {user?.name?.slice(0, 1).toUpperCase() || "AD"}
+              {user?.name?.slice(0, 1).toUpperCase() || "U"}
             </div>
             <div className="flex-1">
-              <p className="text-sm font-medium">
-                {" "}
-                {user?.name || "Admin User"}
+              <p className="text-sm font-medium">{user?.name || "User"}</p>
+              <p className="text-xs text-slate-400">
+                {authType === "admin" ? "Administrator" : "Employee"}
               </p>
-              {/*<p className="text-xs text-slate-400">admin@company.com</p> */}
             </div>
           </div>
           <button
             className="flex items-center w-full gap-2 px-4 py-2 transition-colors rounded-lg text-slate-300 hover:bg-slate-800"
             onClick={handleLogout}
           >
-            <LogOutIcon />
+            <FaSignOutAlt className="w-5 h-5" />
             <span className="text-sm">Logout</span>
           </button>
         </div>
@@ -196,5 +220,3 @@ const Sidebar = ({ isOpen, onClose }) => {
     </>
   );
 };
-
-export default Sidebar;

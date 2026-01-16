@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useReferenceData } from "../../../contexts/GetDashboardRefData";
 import SkeletonLargeBoxes from "../../../components/skeletons/SkeletonLargeBoxes";
 // Icons
@@ -104,139 +104,7 @@ const ChevronDownIcon = () => (
   </svg>
 );
 
-// Sample teacher data
-/*
-const teachersData = [
-  {
-    id: 1,
-    name: "Sarah Johnson",
-    email: "sarah.johnson@school.edu",
-    subject: "Mathematics",
-    department: "Science",
-    grade: "9-12",
-    studentsCount: 120,
-    rating: 4.8,
-    attendance: 98,
-    classesCompleted: 145,
-    totalClasses: 150,
-    status: "Active",
-    joinDate: "2020-08-15",
-    image: "SJ",
-  },
-  {
-    id: 2,
-    name: "Michael Chen",
-    email: "michael.chen@school.edu",
-    subject: "Physics",
-    department: "Science",
-    grade: "10-12",
-    studentsCount: 95,
-    rating: 4.9,
-    attendance: 100,
-    classesCompleted: 148,
-    totalClasses: 150,
-    status: "Active",
-    joinDate: "2019-09-01",
-    image: "MC",
-  },
-  {
-    id: 3,
-    name: "Emily Rodriguez",
-    email: "emily.rodriguez@school.edu",
-    subject: "English Literature",
-    department: "Arts",
-    grade: "9-11",
-    studentsCount: 110,
-    rating: 4.7,
-    attendance: 96,
-    classesCompleted: 142,
-    totalClasses: 150,
-    status: "Active",
-    joinDate: "2021-01-10",
-    image: "ER",
-  },
-  {
-    id: 4,
-    name: "David Thompson",
-    email: "david.thompson@school.edu",
-    subject: "History",
-    department: "Social Studies",
-    grade: "8-10",
-    studentsCount: 105,
-    rating: 4.6,
-    attendance: 94,
-    classesCompleted: 140,
-    totalClasses: 150,
-    status: "Active",
-    joinDate: "2018-08-20",
-    image: "DT",
-  },
-  {
-    id: 5,
-    name: "Lisa Anderson",
-    email: "lisa.anderson@school.edu",
-    subject: "Chemistry",
-    department: "Science",
-    grade: "10-12",
-    studentsCount: 88,
-    rating: 4.9,
-    attendance: 99,
-    classesCompleted: 149,
-    totalClasses: 150,
-    status: "Active",
-    joinDate: "2020-02-15",
-    image: "LA",
-  },
-  {
-    id: 6,
-    name: "Robert Martinez",
-    email: "robert.martinez@school.edu",
-    subject: "Physical Education",
-    department: "Physical Education",
-    grade: "6-12",
-    studentsCount: 200,
-    rating: 4.5,
-    attendance: 92,
-    classesCompleted: 138,
-    totalClasses: 150,
-    status: "On Leave",
-    joinDate: "2017-09-01",
-    image: "RM",
-  },
-  {
-    id: 7,
-    name: "Jennifer Lee",
-    email: "jennifer.lee@school.edu",
-    subject: "Art",
-    department: "Arts",
-    grade: "6-9",
-    studentsCount: 130,
-    rating: 4.8,
-    attendance: 97,
-    classesCompleted: 146,
-    totalClasses: 150,
-    status: "Active",
-    joinDate: "2019-01-15",
-    image: "JL",
-  },
-  {
-    id: 8,
-    name: "William Brown",
-    email: "william.brown@school.edu",
-    subject: "Computer Science",
-    department: "Technology",
-    grade: "9-12",
-    studentsCount: 115,
-    rating: 4.9,
-    attendance: 98,
-    classesCompleted: 147,
-    totalClasses: 150,
-    status: "Active",
-    joinDate: "2020-08-01",
-    image: "WB",
-  },
-];
-*/
+//Icons End
 
 const TeachersPerformance = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -249,14 +117,39 @@ const TeachersPerformance = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isPerformanceExpanded, setIsPerformanceExpanded] = useState(false);
 
-  const { teacherPerformanceInfoList = [], tblPerformanceOverview = [] } =
-    TeacherPerformanceData;
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState("");
+  const [selectedTerm, setSelectedTerm] = useState("");
 
+  const {
+    teacherPerformanceInfoList = [],
+    tblPerformanceOverviewList = [],
+    RefTermScheduleList = [],
+    refRatingList = [],
+  } = TeacherPerformanceData;
+
+  const distinctByTerm = Array.from(
+    new Map(
+      teacherPerformanceInfoList.map((item) => [item.term, item])
+    ).values()
+  );
+  const distinctByAcadYear = Array.from(
+    new Map(
+      teacherPerformanceInfoList.map((item) => [item.schoolYear, item])
+    ).values()
+  );
   // Get unique departments
   const departments = [
     "All",
-    ...new Set(teacherPerformanceInfoList.map((t) => t.department)),
+    ...Array.from(
+      new Map(
+        teacherPerformanceInfoList.map((t) => {
+          const dep = t.department?.trim() ?? ""; // if null/undefined → ""
+          return [dep.toLowerCase(), dep]; // key for distinct, value to keep
+        })
+      ).values()
+    ).sort((a, b) => a.localeCompare(b)),
   ];
+
   const subjects = [
     "All",
     ...new Set(teacherPerformanceInfoList.map((t) => t.subject)),
@@ -265,10 +158,16 @@ const TeachersPerformance = () => {
     "All",
     ...new Set(teacherPerformanceInfoList.map((t) => t.status)),
   ];
+  const terms = ["All", ...new Set(distinctByTerm.map((item) => item.term))];
+  const acadYears = [
+    "All",
+    ...new Set(distinctByAcadYear.map((item) => item.schoolYear)),
+  ];
 
   // Filter teachers
   const filteredTeachers = teacherPerformanceInfoList.filter((teacher) => {
     const matchesSearch =
+      teacher.empID.toLowerCase().includes(searchTerm.toLowerCase()) ||
       teacher.empName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       teacher.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
       teacher.department.toLowerCase().includes(searchTerm.toLowerCase());
@@ -278,9 +177,19 @@ const TeachersPerformance = () => {
       selectedSubject === "All" || teacher.subject === selectedSubject;
     const matchesStatus =
       selectedStatus === "All" || teacher.status === selectedStatus;
+    const matchesTerm =
+      selectedTerm === "All" || teacher.term.toString() === selectedTerm;
+    const matchesAcadYear =
+      selectedAcademicYear === "All" ||
+      teacher.schoolYear.toString() === selectedAcademicYear;
 
     return (
-      matchesSearch && matchesDepartment && matchesSubject && matchesStatus
+      matchesSearch &&
+      matchesDepartment &&
+      matchesSubject &&
+      matchesStatus &&
+      matchesTerm &&
+      matchesAcadYear
     );
   });
 
@@ -297,6 +206,18 @@ const TeachersPerformance = () => {
     (sum, t) => sum + t.studentsCount,
     0
   );
+
+  const getRatingName = (averageRating, referenceData) => {
+    if (!referenceData?.length) return "N/A";
+
+    const matchedRating = referenceData
+      .filter((r) => r.ratingValue <= averageRating)
+      .sort((a, b) => b.ratingValue - a.ratingValue)[0];
+
+    return matchedRating?.ratingName ?? "N/A";
+  };
+
+  const ratingName = getRatingName(avgRating, refRatingList);
 
   const renderStars = (rating) => {
     return (
@@ -315,6 +236,55 @@ const TeachersPerformance = () => {
       month: "long",
     };
     return date.toLocaleDateString("en-US", options);
+  };
+
+  // Function to determine current term based on current month
+  const getCurrentTerm = () => {
+    const currentMonth = new Date().getMonth() + 1; // JavaScript months are 0-indexed
+
+    for (let term of RefTermScheduleList) {
+      if (term.StartMonth <= term.EndMonth) {
+        // Normal range (e.g., Term 2: Jan-Mar, Term 3: Apr-Aug)
+        if (currentMonth >= term.StartMonth && currentMonth <= term.EndMonth) {
+          return term.TermSched;
+        }
+      } else {
+        // Wrapping range (e.g., Term 1: Sep-Dec spans year end)
+        if (currentMonth >= term.StartMonth || currentMonth <= term.EndMonth) {
+          return term.TermSched;
+        }
+      }
+    }
+    return 1; // Default to term 1 if not found
+  };
+
+  // Function to get current academic year
+  const getCurrentAcademicYear = () => {
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1;
+    const currentYear = currentDate.getFullYear();
+
+    // If current month is September or later, academic year starts this year
+    // Otherwise, it started last year
+    return currentMonth >= 9 ? currentYear : currentYear - 1;
+  };
+
+  // Auto-detect current term and academic year on mount
+  useEffect(() => {
+    const currentTerm = getCurrentTerm();
+    const currentAcademicYear = getCurrentAcademicYear();
+
+    setSelectedTerm(currentTerm.toString());
+    setSelectedAcademicYear(currentAcademicYear.toString());
+  }, []);
+
+  // Format academic year for display (e.g., "2024-2025")
+  const formatAcademicYear = (year) => {
+    // Handle "ALL" or non-numeric values
+    if (year === "ALL" || isNaN(parseInt(year))) {
+      return year;
+    }
+    return `${year}-${parseInt(year) + 1}`;
   };
 
   if (loading) return <SkeletonLargeBoxes />;
@@ -364,8 +334,11 @@ const TeachersPerformance = () => {
             <div>
               <p className="mb-1 text-sm text-slate-600">Avg Rating</p>
               <div className="flex items-center gap-2">
-                <p className="text-3xl font-bold text-slate-800">{avgRating}</p>
-                {renderStars(parseFloat(avgRating))}
+                <p className="text-3xl font-bold text-slate-800">
+                  {" "}
+                  {ratingName}
+                </p>
+                {/**  {renderStars(parseFloat(avgRating))}*/}
               </div>
             </div>
             <div className="flex items-center justify-center w-12 h-12 bg-yellow-100 rounded-lg">
@@ -429,44 +402,85 @@ const TeachersPerformance = () => {
       </div>
 
       {/* Filters and Search */}
-      <div className="p-4 mb-6 bg-white border rounded-lg shadow border-slate-200">
-        <div className="flex flex-col gap-4 lg:flex-row">
-          {/* Search */}
-          <div className="flex-1">
-            <div className="relative">
-              <div className="absolute transform -translate-y-1/2 left-3 top-1/2 text-slate-400">
-                <SearchIcon />
-              </div>
-              <input
-                type="text"
-                placeholder="Search by name, email, or subject..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full py-2 pl-10 pr-4 border rounded-lg border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+
+      <div className="p-4 mb-6 space-y-4 bg-white border rounded-lg shadow border-slate-200">
+        {/* TOP ROW */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+          {/* Term & Academic Year */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:w-2/3">
+            <div>
+              <label className="block mb-2 text-sm font-medium text-slate-700">
+                Academic Year
+              </label>
+              <select
+                value={selectedAcademicYear}
+                onChange={(e) => setSelectedAcademicYear(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
+              >
+                {acadYears.map((year) => (
+                  <option key={year} value={year}>
+                    {formatAcademicYear(year)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block mb-2 text-sm font-medium text-slate-700">
+                Term
+              </label>
+              <select
+                value={selectedTerm}
+                onChange={(e) => setSelectedTerm(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
+              >
+                {terms.map((term) => (
+                  <option key={term} value={term}>
+                    {term}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* Filter Toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-2 px-4 py-2 transition-colors rounded-lg bg-slate-100 hover:bg-slate-200"
-          >
-            <FilterIcon />
-            <span className="font-medium">Filters</span>
-            <ChevronDownIcon />
-          </button>
-
-          {/* Export Button */}
-          <button className="flex items-center gap-2 px-4 py-2 text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700">
-            <DownloadIcon />
-            <span className="font-medium">Export</span>
-          </button>
+          {/* Actions */}
+          <div className="flex gap-2 lg:ml-auto">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200"
+            >
+              <FilterIcon />
+              <span className="font-medium">More Filters</span>
+              <ChevronDownIcon />
+            </button>
+            {/*
+            <button className="flex items-center gap-2 px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+              <DownloadIcon />
+              <span className="font-medium">Export</span>
+            </button>* */}
+          </div>
         </div>
 
-        {/* Expanded Filters */}
+        {/* SEARCH ROW */}
+        <div>
+          <div className="relative">
+            <div className="absolute -translate-y-1/2 left-3 top-1/2 text-slate-400">
+              <SearchIcon />
+            </div>
+            <input
+              type="text"
+              placeholder="Search by name, email, or subject..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full py-2 pl-10 pr-4 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* EXPANDED FILTERS */}
         {showFilters && (
-          <div className="grid grid-cols-1 gap-4 pt-4 mt-4 border-t md:grid-cols-3 border-slate-200">
+          <div className="grid grid-cols-1 gap-4 pt-4 border-t md:grid-cols-3 border-slate-200">
+            {/* Department */}
             <div>
               <label className="block mb-2 text-sm font-medium text-slate-700">
                 Department
@@ -474,7 +488,7 @@ const TeachersPerformance = () => {
               <select
                 value={selectedDepartment}
                 onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
               >
                 {departments.map((dept) => (
                   <option key={dept} value={dept}>
@@ -484,6 +498,7 @@ const TeachersPerformance = () => {
               </select>
             </div>
 
+            {/* Subject */}
             <div>
               <label className="block mb-2 text-sm font-medium text-slate-700">
                 Subject
@@ -491,7 +506,7 @@ const TeachersPerformance = () => {
               <select
                 value={selectedSubject}
                 onChange={(e) => setSelectedSubject(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
               >
                 {subjects.map((subject) => (
                   <option key={subject} value={subject}>
@@ -501,6 +516,7 @@ const TeachersPerformance = () => {
               </select>
             </div>
 
+            {/* Status */}
             <div>
               <label className="block mb-2 text-sm font-medium text-slate-700">
                 Status
@@ -508,7 +524,7 @@ const TeachersPerformance = () => {
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
               >
                 {statuses.map((status) => (
                   <option key={status} value={status}>
@@ -807,84 +823,110 @@ const TeachersPerformance = () => {
                   </button>
 
                   <div
-                    className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                    className={`transition-all duration-300 ease-in-out ${
                       isExpanded
-                        ? "max-h-[1000px] opacity-100"
-                        : "max-h-0 opacity-0"
+                        ? "max-h-[600px] opacity-100 overflow-y-auto"
+                        : "max-h-0 opacity-0 overflow-hidden"
                     }`}
                   >
                     <div className="pt-4">
-                      {selectedTeacher.tblPerformanceOverview &&
-                      selectedTeacher.tblPerformanceOverview.length > 0 ? (
-                        <div className="overflow-x-auto">
-                          <table className="w-full border-collapse">
-                            <thead>
-                              <tr className="bg-slate-100">
-                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                  Class
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                  Subject
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                  Topic
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                  Observer Name
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                  Performance Rating
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                  Clear Progress Demo
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                  Demand Placed
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                  Effective Plenary
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {selectedTeacher.tblPerformanceOverview.map(
-                                (row, index) => (
+                      {(() => {
+                        const filteredData =
+                          tblPerformanceOverviewList?.filter(
+                            (a) =>
+                              a.observation?.teacherIdNo ===
+                              selectedTeacher?.empID
+                          ) || [];
+                        // console.log("Filtered Data:", filteredData);
+                        return filteredData.length > 0 ? (
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse">
+                              <thead>
+                                <tr className="bg-slate-100">
+                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                    Class
+                                  </th>
+                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                    Subject
+                                  </th>
+                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                    Topic
+                                  </th>
+                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                    Observer Name
+                                  </th>
+                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                    Performance Rating
+                                  </th>
+                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                    Clear Progress Demo
+                                  </th>
+                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                    Demand Placed
+                                  </th>
+                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                    Effective Plenary
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {filteredData.map((row, index) => (
                                   <tr key={index} className="hover:bg-slate-50">
                                     <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
-                                      {row.class || "-"}
+                                      {row.observation.class || "-"}
                                     </td>
                                     <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
-                                      {row.subject || "-"}
+                                      {row.observation.subject || "-"}
                                     </td>
                                     <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
-                                      {row.topic || "-"}
+                                      {row.observation.topic || "-"}
                                     </td>
                                     <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
-                                      {row.observerName || "-"}
+                                      {row.observation.observerName || "-"}
                                     </td>
                                     <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
-                                      {row.performanceRating || "-"}
+                                      {renderStars(
+                                        row.overallRatingValue || "-"
+                                      )}{" "}
+                                      <span>
+                                        ({row.observation?.overallRating})
+                                      </span>
                                     </td>
                                     <td className="max-w-xs px-4 py-3 text-sm border-b text-slate-700 border-slate-200">
-                                      {row.clearProgressDemo || "-"}
+                                      {renderStars(
+                                        row.clearProgressRatingValue || "-"
+                                      )}
+                                      <span>
+                                        ({row.observation?.clearProgressDemo})
+                                      </span>
                                     </td>
                                     <td className="max-w-xs px-4 py-3 text-sm border-b text-slate-700 border-slate-200">
-                                      {row.demandPlaced || "-"}
+                                      {renderStars(
+                                        row.demandPlacedRatingValue || "-"
+                                      )}
+                                      <span>
+                                        ({row.observation?.demandPlaced})
+                                      </span>
                                     </td>
                                     <td className="max-w-xs px-4 py-3 text-sm border-b text-slate-700 border-slate-200">
-                                      {row.effectivePlenary || "-"}
+                                      {renderStars(
+                                        row.effectivePlenaryRatingValue || "-"
+                                      )}
+                                      <span>
+                                        ({row.observation?.effectivePlenary})
+                                      </span>
                                     </td>
                                   </tr>
-                                )
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <div className="py-8 text-center text-slate-500">
-                          No Data Found
-                        </div>
-                      )}
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="py-8 text-center text-slate-500">
+                            No Data Found
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

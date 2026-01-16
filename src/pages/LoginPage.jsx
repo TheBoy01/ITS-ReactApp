@@ -38,9 +38,9 @@ export default function LoginPage() {
 
       // ✅ login now returns the user object
       const authUser = await login(form.username, form.password, form.remember);
-
       // ✅ Navigate immediately based on role
       if (authUser.role.toLowerCase() === "admin") {
+        console.log("Navigating to admin dashboard");
         navigate("/admin/dashboard", { replace: true });
       } else {
         navigate("/tickets", { replace: true });

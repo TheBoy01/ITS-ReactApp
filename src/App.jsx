@@ -10,6 +10,9 @@ import DashboardPage from "./pages/DashboardPage";
 import TeachersPerformance from "./pages/admin/teachers/TeachersPerformance";
 import AdminLayout from "./pages/admin/layout/AdminLayout";
 import { DashboardDataContext } from "./contexts/GetDashboardRefData";
+import Inventory from "./pages/admin/inventory/Inventory";
+import TicketSupport from "./pages/admin/tickets/TicketSupport";
+import PrintID from "./pages/admin/tickets/PrintID";
 
 function App() {
   return (
@@ -25,31 +28,12 @@ function App() {
           <Route
             path="/Admin-Login"
             element={
-              <RedirectIfAuth>
+              <RedirectIfAuth redirectTo="/admin/dashboard">
                 <LoginPage />
               </RedirectIfAuth>
             }
           />
 
-          {/* Protected admin routes 
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute role="admin">
-                <DashboardPage />
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/teachers"
-            element={
-              <ProtectedRoute role="admin">
-                <TeachersPerformance />
-              </ProtectedRoute>
-            }
-          />
-          */}
           {/* Admin routes with nested layout */}
           <Route
             path="/admin"
@@ -61,15 +45,17 @@ function App() {
               </ProtectedRoute>
             }
           >
-            {/* These are nested routes - they render inside Outlet */}
-
+            {/* Nested routes */}
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="teachers" element={<TeachersPerformance />} />
+            <Route path="inventory" element={<Inventory />} />
+            <Route path="tickets/ticketsupport" element={<TicketSupport />} />
+            <Route path="tickets/printid" element={<PrintID />} />
             {/* Default redirect */}
             <Route index element={<Navigate to="dashboard" replace />} />
           </Route>
 
-          {/* Catch-all - removed redirect to /Ticket */}
+          {/* Catch-all */}
           <Route
             path="*"
             element={

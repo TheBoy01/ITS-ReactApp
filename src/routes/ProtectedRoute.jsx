@@ -24,12 +24,13 @@ export default function ProtectedRoute({ children, role }) {
 
   // Not logged in
   if (!user) {
+    //alert("protected route. Invalid User!");
     return <Navigate to="/Ticket" replace />;
   }
 
   // Role-based redirect
   if (role && user.role !== role) {
-    return user.role === "admin" ? (
+    return user.role.toLowerCase() === "admin" ? (
       <Navigate to="/admin/dashboard" replace />
     ) : (
       <Navigate to="/Ticket" replace />

@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import AdminLayout from "./admin/layout/AdminLayout";
 import Dashboard from "./admin/dashboard/Dashboard";
 
 function App() {

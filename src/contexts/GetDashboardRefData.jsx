@@ -11,21 +11,19 @@ import api from "../API/api";
 const GetDashboardRefData = createContext();
 
 export const DashboardDataContext = ({ children }) => {
-  const { token } = useAuth();
+  const { loading: authLoading } = useAuth(); // only care about auth init
   const [TeacherPerformanceData, setTeacherPerformanceData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchReferenceData = async () => {
-      if (!token) return;
-
       try {
         setLoading(true);
-        const [TPODataList] = await Promise.all([
-          api.get("api/TeacherPerformance/GetDashboardRefData"),
-        ]);
-
-        setTeacherPerformanceData(TPODataList.data);
+        const response = await api.get(
+          "api/TeacherPerformance/GetDashboardRefData"
+        );
+        //console.log("Fetched reference data:", response.data);
+        setTeacherPerformanceData(response.data);
       } catch (error) {
         console.error("Error fetching reference data:", error);
       } finally {
@@ -33,8 +31,10 @@ export const DashboardDataContext = ({ children }) => {
       }
     };
 
-    fetchReferenceData();
-  }, [token]);
+    if (!authLoading) {
+      fetchReferenceData();
+    }
+  }, [authLoading]);
 
   const value = useMemo(
     () => ({ TeacherPerformanceData, loading }),
@@ -52,7 +52,7 @@ export const useReferenceData = () => {
   const context = useContext(GetDashboardRefData);
   if (!context) {
     throw new Error(
-      "useReferenceData must be used within DashboardDataContextProvider"
+      "useReferenceData must be used within DashboardDataContext"
     );
   }
   return context;

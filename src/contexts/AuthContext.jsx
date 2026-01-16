@@ -7,58 +7,100 @@ import React, {
   useCallback,
 } from "react";
 import { jwtDecode } from "jwt-decode";
-import api from "../API/api";
+import api, { setAuthToken } from "../API/api";
 import { SwalError } from "../utils/SwalAlert";
 
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [userMenus, setUserMenus] = useState([]);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authType, setAuthType] = useState(null); // 'admin' or 'employee'
 
-  // Logout function - use useCallback to memoize it
-  const logout = useCallback(() => {
-    localStorage.removeItem("accessToken");
-    setUser(null);
-    setToken(null);
-  }, []);
-
-  // Initialize user from localStorage
-  useEffect(() => {
-    const savedToken = localStorage.getItem("accessToken");
-    if (savedToken) {
+  // Logout function
+  const logout = useCallback(async () => {
+    //alert(authType);
+    if (authType === "admin") {
+      // Admin: clear HttpOnly cookie
       try {
-        const payload = jwtDecode(savedToken);
-
-        // Check if token is already expired
-        const now = Date.now() / 1000;
-        if (payload.exp && payload.exp < now) {
-          localStorage.removeItem("accessToken");
-          setLoading(false);
-          return;
-        }
-        const authUser = {
-          empID: payload.EmpID || payload.nameid,
-          email: payload.email,
-          name: payload.unique_name || payload.name || payload.sub,
-          role: payload.Role || payload.role,
-          exp: payload.exp,
-        };
-
-        setUser(authUser);
-        setToken(savedToken);
+        await api.post("/api/auth/logout");
       } catch (error) {
-        console.error("Token decode error:", error);
-        localStorage.removeItem("accessToken");
+        console.error("Logout error:", error);
       }
+    } else {
+      // Employee: clear localStorage
+      localStorage.removeItem("accessToken");
+      setAuthToken(null); // ← Clear Authorization header
     }
-    setLoading(false);
+
+    setUser(null);
+    setUserMenus([]);
+    setToken(null);
+    setAuthType(null);
+  }, [authType]);
+
+  // Initialize authentication on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const savedToken = localStorage.getItem("accessToken");
+
+      if (savedToken) {
+        // Employee auth (localStorage JWT)
+        try {
+          const payload = jwtDecode(savedToken);
+          const now = Date.now() / 1000;
+
+          if (payload.exp && payload.exp < now) {
+            localStorage.removeItem("accessToken");
+            setAuthToken(null);
+            setLoading(false);
+            return;
+          }
+
+          const authUser = {
+            empID: payload.EmpID || payload.nameid,
+            email: payload.email,
+            name: payload.unique_name || payload.name || payload.sub,
+            role: payload.Role || payload.role,
+            exp: payload.exp,
+          };
+
+          setUser(authUser);
+          setToken(savedToken);
+          setAuthType("employee");
+          setAuthToken(savedToken);
+        } catch (error) {
+          console.error("Token decode error:", error);
+          localStorage.removeItem("accessToken");
+          setAuthToken(null);
+        }
+      } else {
+        // No localStorage token, check for Admin session (HttpOnly cookie)
+        try {
+          const response = await api.get("/api/auth/me");
+          setUser(response.data.user);
+          setUserMenus(response.data.menus);
+          setAuthType("admin");
+          setAuthToken(null); // No header needed for admin (uses cookie)
+        } catch (error) {
+          // Silently fail - no admin session found
+          if (error.response?.status !== 401) {
+            //console.error("Auth check error:", error);
+          }
+        }
+      }
+
+      setLoading(false);
+    };
+
+    checkAuth();
   }, []);
 
-  // Auto-logout when token expires
+  // Auto-logout when employee token expires
   useEffect(() => {
-    if (!user?.exp) return;
+    if (authType !== "employee" || !user?.exp) return;
 
     const now = Date.now() / 1000;
     const timeLeft = user.exp - now;
@@ -81,44 +123,53 @@ export const AuthProvider = ({ children }) => {
     }, timeLeft * 1000);
 
     return () => clearTimeout(timer);
-  }, [user?.exp, logout]); // Now logout is stable
+  }, [user?.exp, authType, logout]);
 
-  // Admin login
+  // Admin/Employee login
   const login = useCallback(async (username, password, remember = false) => {
     try {
       const resp = await api.post("/api/auth/login", { username, password });
-      const token = resp.data.token;
 
-      if (!token) {
-        SwalError("Error", "Token missing");
-        throw new Error("Token missing");
+      if (resp.data.token) {
+        // Employee login response
+        const token = resp.data.token;
+        localStorage.setItem("accessToken", token);
+        setAuthToken(token); // ← Set Authorization header
+
+        const payload = jwtDecode(token);
+
+        const authUser = {
+          empID: payload.EmpID || payload.nameid,
+          email: payload.email,
+          name: payload.unique_name || payload.name || payload.sub,
+          role: payload.Role || payload.role,
+          exp: payload.exp,
+        };
+
+        setUser(authUser);
+        setToken(token);
+        setAuthType("employee");
+        return authUser;
+      } else {
+        // Admin login response (HttpOnly cookie)
+        setUser(resp.data.user);
+        setUserMenus(resp.data.menus);
+        setAuthType("admin");
+        setAuthToken(null); // ← No header needed, cookie handles it
+        return resp.data.user;
       }
-
-      localStorage.setItem("accessToken", token);
-      const payload = jwtDecode(token);
-
-      const authUser = {
-        empID: payload.EmpID || payload.nameid,
-        email: payload.email,
-        name: payload.unique_name || payload.name || payload.sub,
-        role: payload.Role || payload.role,
-        exp: payload.exp,
-      };
-
-      setUser(authUser);
-      setToken(token);
-
-      return authUser;
     } catch (error) {
       console.error("Login error:", error);
+      SwalError("Error", error.response?.data || "Login failed");
       throw error;
     }
   }, []);
 
-  // Employee login / verify IDNo
   const createToken = useCallback((token) => {
     try {
       localStorage.setItem("accessToken", token);
+      setAuthToken(token); // ← Set Authorization header
+
       const payload = jwtDecode(token);
 
       const authUser = {
@@ -131,6 +182,7 @@ export const AuthProvider = ({ children }) => {
 
       setUser(authUser);
       setToken(token);
+      setAuthType("employee");
 
       return authUser;
     } catch (error) {
@@ -139,17 +191,19 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  // Memoize context value to prevent unnecessary re-renders
+  // Memoize context value
   const value = useMemo(
     () => ({
       user,
+      userMenus,
       token,
       loading,
+      authType,
       login,
       createToken,
       logout,
     }),
-    [user, token, loading, login, createToken, logout]
+    [user, userMenus, token, loading, authType, login, createToken, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
