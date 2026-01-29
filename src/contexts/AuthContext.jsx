@@ -21,20 +21,20 @@ export const AuthProvider = ({ children }) => {
 
   // Logout function
   const logout = useCallback(async () => {
-    //alert(authType);
+    // Clear localStorage and token
+    localStorage.removeItem("accessToken");
+    setAuthToken(null);
+
+    // Call backend logout if admin (to clear menu cache)
     if (authType === "admin") {
-      // Admin: clear HttpOnly cookie
       try {
         await api.post("/api/auth/logout");
       } catch (error) {
         console.error("Logout error:", error);
       }
-    } else {
-      // Employee: clear localStorage
-      localStorage.removeItem("accessToken");
-      setAuthToken(null); // ← Clear Authorization header
     }
 
+    // Reset all state
     setUser(null);
     setUserMenus([]);
     setToken(null);
@@ -42,53 +42,87 @@ export const AuthProvider = ({ children }) => {
   }, [authType]);
 
   // Initialize authentication on mount
+  // In your AuthContext, update checkAuth
   useEffect(() => {
     const checkAuth = async () => {
       const savedToken = localStorage.getItem("accessToken");
 
       if (savedToken) {
-        // Employee auth (localStorage JWT)
         try {
           const payload = jwtDecode(savedToken);
           const now = Date.now() / 1000;
 
+          // Check if token is expired
           if (payload.exp && payload.exp < now) {
             localStorage.removeItem("accessToken");
+            localStorage.removeItem("userMenus");
             setAuthToken(null);
             setLoading(false);
             return;
           }
 
-          const authUser = {
-            empID: payload.EmpID || payload.nameid,
-            email: payload.email,
-            name: payload.unique_name || payload.name || payload.sub,
-            role: payload.Role || payload.role,
-            exp: payload.exp,
-          };
+          // Check if token has required claims (basic tampering detection)
+          if (!payload.UserId && !payload.EmpID && !payload.nameid) {
+            console.error("Invalid token - missing user identifier");
+            localStorage.removeItem("accessToken");
+            localStorage.removeItem("userMenus");
+            setAuthToken(null);
+            setLoading(false);
+            return;
+          }
 
-          setUser(authUser);
-          setToken(savedToken);
-          setAuthType("employee");
+          // Set authorization header
           setAuthToken(savedToken);
+          setToken(savedToken);
+
+          // Determine if admin or employee
+          const isAdmin = payload.RoleId && payload.menu;
+
+          if (isAdmin) {
+            // Admin user
+            setUser({
+              empID: payload.UserId,
+              email: payload.email,
+              name: payload.unique_name || payload.name,
+              role: payload.Role || payload.role,
+              exp: payload.exp,
+            });
+            setAuthType("admin");
+
+            // Fetch menus from backend (this will also validate the token)
+            try {
+              const response = await api.get("/api/auth/menus");
+              setUserMenus(response.data);
+            } catch (error) {
+              // If 401, interceptor will handle logout
+              console.error("Failed to fetch menus:", error);
+              if (error.response?.status === 401) {
+                // Token is invalid - clear everything
+                localStorage.removeItem("accessToken");
+                localStorage.removeItem("userMenus");
+                setAuthToken(null);
+                setUser(null);
+                setAuthType(null);
+                setUserMenus([]);
+              }
+            }
+          } else {
+            // Employee user
+            setUser({
+              empID: payload.EmpID || payload.nameid,
+              email: payload.email,
+              name: payload.unique_name || payload.name || payload.sub,
+              role: payload.Role || payload.role,
+              exp: payload.exp,
+            });
+            setAuthType("employee");
+            setUserMenus([]);
+          }
         } catch (error) {
           console.error("Token decode error:", error);
           localStorage.removeItem("accessToken");
+          localStorage.removeItem("userMenus");
           setAuthToken(null);
-        }
-      } else {
-        // No localStorage token, check for Admin session (HttpOnly cookie)
-        try {
-          const response = await api.get("/api/auth/me");
-          setUser(response.data.user);
-          setUserMenus(response.data.menus);
-          setAuthType("admin");
-          setAuthToken(null); // No header needed for admin (uses cookie)
-        } catch (error) {
-          // Silently fail - no admin session found
-          if (error.response?.status !== 401) {
-            //console.error("Auth check error:", error);
-          }
         }
       }
 
@@ -97,10 +131,9 @@ export const AuthProvider = ({ children }) => {
 
     checkAuth();
   }, []);
-
-  // Auto-logout when employee token expires
+  // Auto-logout when token expires
   useEffect(() => {
-    if (authType !== "employee" || !user?.exp) return;
+    if (!user?.exp) return;
 
     const now = Date.now() / 1000;
     const timeLeft = user.exp - now;
@@ -108,7 +141,7 @@ export const AuthProvider = ({ children }) => {
     if (timeLeft <= 0) {
       SwalError(
         "Session Expired",
-        "Your session has expired. Please log in again."
+        "Your session has expired. Please log in again.",
       );
       logout();
       return;
@@ -117,27 +150,49 @@ export const AuthProvider = ({ children }) => {
     const timer = setTimeout(() => {
       SwalError(
         "Session Expired",
-        "Your session has expired. Please log in again."
+        "Your session has expired. Please log in again.",
       );
       logout();
     }, timeLeft * 1000);
 
     return () => clearTimeout(timer);
-  }, [user?.exp, authType, logout]);
+  }, [user?.exp, logout]);
 
   // Admin/Employee login
-  const login = useCallback(async (username, password, remember = false) => {
+  const login = useCallback(async (username, password) => {
     try {
       const resp = await api.post("/api/auth/login", { username, password });
+      const token = resp.data.token;
 
-      if (resp.data.token) {
-        // Employee login response
-        const token = resp.data.token;
-        localStorage.setItem("accessToken", token);
-        setAuthToken(token); // ← Set Authorization header
+      if (!token) {
+        throw new Error("Token missing from response");
+      }
 
-        const payload = jwtDecode(token);
+      // Store token in localStorage
+      localStorage.setItem("accessToken", token);
+      setAuthToken(token);
+      setToken(token);
 
+      // Decode token to get user info
+      const payload = jwtDecode(token);
+
+      // Check if admin (has menus in response) or employee
+      if (resp.data.menus && resp.data.menus.length > 0) {
+        // Admin login
+        const authUser = {
+          empID: payload.UserId || payload.nameid,
+          email: payload.email,
+          name: resp.data.user.name, // Use name from response
+          role: resp.data.user.role,
+          exp: payload.exp,
+        };
+
+        setUser(authUser);
+        setUserMenus(resp.data.menus);
+        setAuthType("admin");
+        return authUser;
+      } else {
+        // Employee login
         const authUser = {
           empID: payload.EmpID || payload.nameid,
           email: payload.email,
@@ -147,16 +202,9 @@ export const AuthProvider = ({ children }) => {
         };
 
         setUser(authUser);
-        setToken(token);
+        setUserMenus([]);
         setAuthType("employee");
         return authUser;
-      } else {
-        // Admin login response (HttpOnly cookie)
-        setUser(resp.data.user);
-        setUserMenus(resp.data.menus);
-        setAuthType("admin");
-        setAuthToken(null); // ← No header needed, cookie handles it
-        return resp.data.user;
       }
     } catch (error) {
       console.error("Login error:", error);
@@ -165,10 +213,12 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  // Employee ID verification
   const createToken = useCallback((token) => {
     try {
       localStorage.setItem("accessToken", token);
-      setAuthToken(token); // ← Set Authorization header
+      setAuthToken(token);
+      setToken(token);
 
       const payload = jwtDecode(token);
 
@@ -181,7 +231,7 @@ export const AuthProvider = ({ children }) => {
       };
 
       setUser(authUser);
-      setToken(token);
+      setUserMenus([]);
       setAuthType("employee");
 
       return authUser;
@@ -203,7 +253,7 @@ export const AuthProvider = ({ children }) => {
       createToken,
       logout,
     }),
-    [user, userMenus, token, loading, authType, login, createToken, logout]
+    [user, userMenus, token, loading, authType, login, createToken, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

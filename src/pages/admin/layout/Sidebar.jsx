@@ -89,14 +89,15 @@ const Sidebar = ({ isOpen, onClose }) => {
       {/* Sidebar */}
       <aside
         className={`
-        fixed top-0 left-0 z-50 h-full w-64 bg-slate-900 text-white
+        fixed top-0 left-0 z-50 h-screen w-64 bg-slate-900 text-white
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? "translate-x-0" : "-translate-x-full"}
-        lg:translate-x-0 lg:static lg:z-0
+        lg:translate-x-0 lg:sticky lg:z-0
+        flex flex-col
       `}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-700">
+        <div className="flex items-center justify-between p-4 border-b border-slate-700 shrink-0">
           <h1 className="text-xl font-bold">
             {authType === "admin" ? "Admin Panel" : "Employee Panel"}
           </h1>
@@ -105,8 +106,8 @@ const Sidebar = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Menu Items */}
-        <nav className="p-4 space-y-2">
+        {/* Menu Items - Scrollable */}
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -195,8 +196,8 @@ const Sidebar = ({ isOpen, onClose }) => {
           })}
         </nav>
 
-        {/* User Section */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-700">
+        {/* User Section - Fixed at bottom */}
+        <div className="p-4 border-t border-slate-700 shrink-0">
           <div className="flex items-center gap-3 mb-3">
             <div className="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-full">
               {user?.name?.slice(0, 1).toUpperCase() || "U"}
@@ -220,3 +221,5 @@ const Sidebar = ({ isOpen, onClose }) => {
     </>
   );
 };
+
+export default Sidebar;

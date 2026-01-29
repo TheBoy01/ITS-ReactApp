@@ -5,9 +5,17 @@
 @layer base {
   html,
   body {
-    @apply p-0 m-0 bg-gray-100; /* change bg-gray-100 to any Tailwind color */
+    @apply p-0 m-0 overflow-x-hidden bg-gray-100; /* Added overflow-x-hidden */
+  }
+
+  /* Ensure body takes full height without extra space */
+  html,
+  body,
+  #root {
+    @apply h-full;
   }
 }
+
 @keyframes shimmer {
   0% {
     background-position: -500px 0;

@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { useReferenceData } from "../../../contexts/GetDashboardRefData";
+import {
+  useReferenceData,
+  GetTeacherAttainmentByTeacherID,
+} from "../../../contexts/GetDashboardRefData";
 import SkeletonLargeBoxes from "../../../components/skeletons/SkeletonLargeBoxes";
 // Icons
 const SearchIcon = () => (
@@ -120,6 +123,10 @@ const TeachersPerformance = () => {
   const [selectedAcademicYear, setSelectedAcademicYear] = useState("");
   const [selectedTerm, setSelectedTerm] = useState("");
 
+  const [isStudentPerfExpanded, setIsStudentPerfExpanded] = useState(false);
+  const [loadingStudentPerf, setLoadingStudentPerf] = useState(false);
+  const [studentPerfData, setStudentPerfData] = useState(null);
+
   const {
     teacherPerformanceInfoList = [],
     tblPerformanceOverviewList = [],
@@ -129,13 +136,13 @@ const TeachersPerformance = () => {
 
   const distinctByTerm = Array.from(
     new Map(
-      teacherPerformanceInfoList.map((item) => [item.term, item])
-    ).values()
+      teacherPerformanceInfoList.map((item) => [item.term, item]),
+    ).values(),
   );
   const distinctByAcadYear = Array.from(
     new Map(
-      teacherPerformanceInfoList.map((item) => [item.schoolYear, item])
-    ).values()
+      teacherPerformanceInfoList.map((item) => [item.schoolYear, item]),
+    ).values(),
   );
   // Get unique departments
   const departments = [
@@ -145,8 +152,8 @@ const TeachersPerformance = () => {
         teacherPerformanceInfoList.map((t) => {
           const dep = t.department?.trim() ?? ""; // if null/undefined → ""
           return [dep.toLowerCase(), dep]; // key for distinct, value to keep
-        })
-      ).values()
+        }),
+      ).values(),
     ).sort((a, b) => a.localeCompare(b)),
   ];
 
@@ -193,6 +200,24 @@ const TeachersPerformance = () => {
     );
   });
 
+  const fetchStudentPerformance = async (teacherId) => {
+    setLoadingStudentPerf(true);
+    try {
+      const TeachersAttaintmentRatingDto = {
+        TeacherID: teacherId, // must match backend DTO property name
+      };
+      const response = await GetTeacherAttainmentByTeacherID(
+        TeachersAttaintmentRatingDto,
+      );
+      setStudentPerfData(response);
+    } catch (error) {
+      console.error("Failed to fetch student performance:", error);
+      setStudentPerfData([]);
+    } finally {
+      setLoadingStudentPerf(false);
+    }
+  };
+
   // Calculate stats
   const totalTeachers = filteredTeachers.length;
   const avgRating = (
@@ -200,11 +225,11 @@ const TeachersPerformance = () => {
     totalTeachers
   ).toFixed(1);
   const avgAttendance = Math.round(
-    filteredTeachers.reduce((sum, t) => sum + t.attendance, 0) / totalTeachers
+    filteredTeachers.reduce((sum, t) => sum + t.attendance, 0) / totalTeachers,
   );
   const totalStudents = filteredTeachers.reduce(
     (sum, t) => sum + t.studentsCount,
-    0
+    0,
   );
 
   const getRatingName = (averageRating, referenceData) => {
@@ -285,6 +310,13 @@ const TeachersPerformance = () => {
       return year;
     }
     return `${year}-${parseInt(year) + 1}`;
+  };
+
+  // Reset data when modal closes
+  const handleCloseModal = () => {
+    setSelectedTeacher(null);
+    setStudentPerfData(null);
+    setIsStudentPerfExpanded(false);
   };
 
   if (loading) return <SkeletonLargeBoxes />;
@@ -469,7 +501,7 @@ const TeachersPerformance = () => {
             </div>
             <input
               type="text"
-              placeholder="Search by name, email, or subject..."
+              placeholder="Search by Teacher's ID, name, email, or subject..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full py-2 pl-10 pr-4 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
@@ -604,10 +636,8 @@ const TeachersPerformance = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col items-center gap-1">
-                        <span className="font-semibold text-slate-800">
-                          {teacher.rating}
-                        </span>
                         {renderStars(teacher.averageRating)}
+                        {getRatingName(teacher.averageRating, refRatingList)}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -668,9 +698,13 @@ const TeachersPerformance = () => {
                     Teacher Details
                   </h3>
                   <button
-                    onClick={() => setSelectedTeacher(null)}
+                    onClick={handleCloseModal}
                     className="p-2 transition-colors rounded-lg hover:bg-slate-100"
                   >
+                    <div
+                      className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto"
+                      onClick={(e) => e.stopPropagation()} // ← Prevent closing when clicking inside
+                    ></div>
                     <svg
                       className="w-6 h-6"
                       fill="none"
@@ -699,7 +733,12 @@ const TeachersPerformance = () => {
                     <div className="flex items-center gap-2 mt-2">
                       {renderStars(selectedTeacher.averageRating)}
                       <span className="text-sm text-slate-600">
-                        (Overall Rating)
+                        ({" "}
+                        {getRatingName(
+                          selectedTeacher.averageRating,
+                          refRatingList,
+                        )}{" "}
+                        )
                       </span>
                     </div>
                   </div>
@@ -796,7 +835,7 @@ const TeachersPerformance = () => {
                   </div>
                 </div>
 
-                {/* Performance Overview Section with Dropdown */}
+                {/* Performance Overview Section */}
                 <div className="pt-4 border-t border-slate-200">
                   <button
                     onClick={() => setIsExpanded(!isExpanded)}
@@ -835,9 +874,8 @@ const TeachersPerformance = () => {
                           tblPerformanceOverviewList?.filter(
                             (a) =>
                               a.observation?.teacherIdNo ===
-                              selectedTeacher?.empID
+                              selectedTeacher?.empID,
                           ) || [];
-                        // console.log("Filtered Data:", filteredData);
                         return filteredData.length > 0 ? (
                           <div className="overflow-x-auto">
                             <table className="w-full border-collapse">
@@ -886,7 +924,7 @@ const TeachersPerformance = () => {
                                     </td>
                                     <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
                                       {renderStars(
-                                        row.overallRatingValue || "-"
+                                        row.overallRatingValue || "-",
                                       )}{" "}
                                       <span>
                                         ({row.observation?.overallRating})
@@ -894,7 +932,7 @@ const TeachersPerformance = () => {
                                     </td>
                                     <td className="max-w-xs px-4 py-3 text-sm border-b text-slate-700 border-slate-200">
                                       {renderStars(
-                                        row.clearProgressRatingValue || "-"
+                                        row.clearProgressRatingValue || "-",
                                       )}
                                       <span>
                                         ({row.observation?.clearProgressDemo})
@@ -902,7 +940,7 @@ const TeachersPerformance = () => {
                                     </td>
                                     <td className="max-w-xs px-4 py-3 text-sm border-b text-slate-700 border-slate-200">
                                       {renderStars(
-                                        row.demandPlacedRatingValue || "-"
+                                        row.demandPlacedRatingValue || "-",
                                       )}
                                       <span>
                                         ({row.observation?.demandPlaced})
@@ -910,7 +948,7 @@ const TeachersPerformance = () => {
                                     </td>
                                     <td className="max-w-xs px-4 py-3 text-sm border-b text-slate-700 border-slate-200">
                                       {renderStars(
-                                        row.effectivePlenaryRatingValue || "-"
+                                        row.effectivePlenaryRatingValue || "-",
                                       )}
                                       <span>
                                         ({row.observation?.effectivePlenary})
@@ -927,6 +965,164 @@ const TeachersPerformance = () => {
                           </div>
                         );
                       })()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* NEW: Teachers attaintment Section */}
+                <div className="pt-4 border-t border-slate-200">
+                  <button
+                    onClick={() => {
+                      setIsStudentPerfExpanded(!isStudentPerfExpanded);
+                      // Fetch data when expanding
+                      if (!isStudentPerfExpanded && !studentPerfData) {
+                        fetchStudentPerformance(selectedTeacher.empID);
+                      }
+                    }}
+                    className="flex items-center justify-between w-full p-3 transition-colors rounded-lg hover:bg-slate-50"
+                  >
+                    <span className="font-semibold text-slate-800">
+                      Teachers Attaintment
+                    </span>
+                    <svg
+                      className={`w-5 h-5 text-slate-600 transition-transform duration-300 ${
+                        isStudentPerfExpanded ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 9l-7 7-7-7"
+                      />
+                    </svg>
+                  </button>
+
+                  <div
+                    className={`transition-all duration-300 ease-in-out ${
+                      isStudentPerfExpanded
+                        ? "max-h-[800px] opacity-100 overflow-y-auto"
+                        : "max-h-0 opacity-0 overflow-hidden"
+                    }`}
+                  >
+                    <div className="pt-4">
+                      {loadingStudentPerf ? (
+                        // Loading State
+                        <div className="flex flex-col items-center justify-center py-12">
+                          <div className="w-12 h-12 border-4 border-blue-200 rounded-full border-t-blue-600 animate-spin"></div>
+                          <p className="mt-4 text-sm text-slate-600">
+                            Loading student performance data...
+                          </p>
+                        </div>
+                      ) : studentPerfData && studentPerfData.length > 0 ? (
+                        // Data Table
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse">
+                            <thead>
+                              <tr className="bg-slate-100">
+                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
+                                  Course Name
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  A1
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  A2
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  B1
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  C1
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  D1
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  E1
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  F1
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  G1
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  U1
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  Zero
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  Above Expected
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  Expected
+                                </th>
+                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
+                                  Below Expected
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {studentPerfData.map((row, index) => (
+                                <tr key={index} className="hover:bg-slate-50">
+                                  <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
+                                    {row.courseName || "-"}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
+                                    {row.a1}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
+                                    {row.a2}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
+                                    {row.b1}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
+                                    {row.c1}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
+                                    {row.d1}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
+                                    {row.e1}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
+                                    {row.f1}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
+                                    {row.g1}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
+                                    {row.u1}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
+                                    {row.zero}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm font-semibold text-center text-green-600 border-b border-slate-200">
+                                    {row.aboveExpected}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm font-semibold text-center text-blue-600 border-b border-slate-200">
+                                    {row.expected}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm font-semibold text-center text-red-600 border-b border-slate-200">
+                                    {row.belowExpected}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        // No Data State
+                        <div className="py-8 text-center text-slate-500">
+                          No teachers attaintment data found
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

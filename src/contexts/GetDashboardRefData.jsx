@@ -20,7 +20,7 @@ export const DashboardDataContext = ({ children }) => {
       try {
         setLoading(true);
         const response = await api.get(
-          "api/TeacherPerformance/GetDashboardRefData"
+          "api/TeacherPerformance/GetDashboardRefData",
         );
         //console.log("Fetched reference data:", response.data);
         setTeacherPerformanceData(response.data);
@@ -38,7 +38,7 @@ export const DashboardDataContext = ({ children }) => {
 
   const value = useMemo(
     () => ({ TeacherPerformanceData, loading }),
-    [TeacherPerformanceData, loading]
+    [TeacherPerformanceData, loading],
   );
 
   return (
@@ -52,8 +52,28 @@ export const useReferenceData = () => {
   const context = useContext(GetDashboardRefData);
   if (!context) {
     throw new Error(
-      "useReferenceData must be used within DashboardDataContext"
+      "useReferenceData must be used within DashboardDataContext",
     );
   }
   return context;
+};
+
+export const GetTeacherAttainmentByTeacherID = async (
+  TeachersAttaintmentRatingDto,
+) => {
+  try {
+    //console.log(TeachersAttaintmentRatingDto);
+    const response = await api.get(
+      "/api/TeacherPerformance/GetTeacherAttainment/",
+      {
+        params: {
+          teacherID: TeachersAttaintmentRatingDto.TeacherID,
+        },
+      },
+    );
+    console.log("Fetched student performance:", response.data);
+    return response.data; //setStudentPerfData(response.data);
+  } catch (error) {
+    console.error("Failed to fetch student performance:", error);
+  }
 };

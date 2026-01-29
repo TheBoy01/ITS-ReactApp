@@ -45,16 +45,19 @@ export default function TicketingPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-100">
+    <div className="flex flex-col bg-gray-100">
+      {" "}
+      {/* Removed min-h-screen */}
       {/* HEADER */}
       <div className="w-full h-[10vh] bg-green-600 flex items-center justify-center px-4">
         <h1 className="text-base font-semibold text-center text-white sm:text-lg md:text-xl lg:text-2xl">
           Welcome to the IT Ticketing of Arab Unity School
         </h1>
       </div>
-
       {/* CONTENT */}
-      <div className="flex flex-col items-center px-4 py-6 sm:py-8">
+      <div className="flex flex-col items-center flex-1 px-4 py-6 sm:py-8">
+        {" "}
+        {/* Added flex-1 */}
         <div className="w-auto p-10 pt-2 -mt-12 bg-white shadow-lg rounded-xl">
           {/* Only show VerifyIDNo or TicketForm - remove LoginPage from here */}
           {token ? (
