@@ -83,6 +83,7 @@ export const AuthProvider = ({ children }) => {
             setUser({
               empID: payload.UserId,
               email: payload.email,
+              empCode: payload.nameid,
               name: payload.unique_name || payload.name,
               role: payload.Role || payload.role,
               exp: payload.exp,
@@ -181,7 +182,7 @@ export const AuthProvider = ({ children }) => {
         // Admin login
         const authUser = {
           empID: payload.UserId || payload.nameid,
-          email: payload.email,
+          empCode: payload.nameid,
           name: resp.data.user.name, // Use name from response
           role: resp.data.user.role,
           exp: payload.exp,
@@ -195,6 +196,7 @@ export const AuthProvider = ({ children }) => {
         // Employee login
         const authUser = {
           empID: payload.EmpID || payload.nameid,
+          empCode: payload.nameid,
           email: payload.email,
           name: payload.unique_name || payload.name || payload.sub,
           role: payload.Role || payload.role,
@@ -224,6 +226,7 @@ export const AuthProvider = ({ children }) => {
 
       const authUser = {
         empID: payload.EmpID || payload.nameid,
+        empCode: payload.nameid,
         email: payload.email,
         name: payload.unique_name || payload.name || payload.sub,
         role: payload.Role || payload.role,

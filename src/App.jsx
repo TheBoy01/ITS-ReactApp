@@ -14,6 +14,10 @@ import Inventory from "./pages/admin/inventory/Inventory";
 import TicketSupport from "./pages/admin/tickets/TicketSupport";
 import PrintID from "./pages/admin/tickets/PrintID";
 import Footer from "./components/footer/footer";
+import Clinic from "./pages/admin/clinic/Clinic";
+import AdminDefaultRedirect from "./components/redirect/AdminDefaultRedirect";
+import AccessDenied from "./pages/AccessDenied";
+
 function App() {
   return (
     <BrowserRouter>
@@ -49,17 +53,73 @@ function App() {
                   </ProtectedRoute>
                 }
               >
-                <Route path="dashboard" element={<DashboardPage />} />
-                <Route path="teachers" element={<TeachersPerformance />} />
-                <Route path="inventory" element={<Inventory />} />
+                <Route
+                  path="dashboard"
+                  element={
+                    <ProtectedRoute
+                      role="admin"
+                      requiredRoute="/admin/dashboard"
+                    >
+                      <DashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="teachers"
+                  element={
+                    <ProtectedRoute
+                      role="admin"
+                      requiredRoute="/admin/teachers"
+                    >
+                      <TeachersPerformance />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="inventory"
+                  element={
+                    <ProtectedRoute
+                      role="admin"
+                      requiredRoute="/admin/inventory"
+                    >
+                      <Inventory />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="tickets/ticketsupport"
-                  element={<TicketSupport />}
+                  element={
+                    <ProtectedRoute
+                      role="admin"
+                      requiredRoute="/admin/tickets/ticketsupport"
+                    >
+                      <TicketSupport />
+                    </ProtectedRoute>
+                  }
                 />
-                <Route path="tickets/printid" element={<PrintID />} />
-                <Route index element={<Navigate to="dashboard" replace />} />
-              </Route>
+                <Route
+                  path="tickets/printid"
+                  element={
+                    <ProtectedRoute
+                      role="admin"
+                      requiredRoute="/admin/tickets/printid"
+                    >
+                      <PrintID />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="clinic"
+                  element={
+                    <ProtectedRoute role="admin" requiredRoute="/admin/clinic">
+                      <Clinic />
+                    </ProtectedRoute>
+                  }
+                />
 
+                <Route index element={<AdminDefaultRedirect />} />
+              </Route>
+              <Route path="/access-denied" element={<AccessDenied />} />
               {/* 404 */}
               <Route
                 path="*"

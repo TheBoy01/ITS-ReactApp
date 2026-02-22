@@ -1,5 +1,6 @@
 // API/TicketAPI.js
 import api from "./api";
+import * as signalR from "@microsoft/signalr";
 
 export async function createTicket(payload) {
   try {
@@ -50,4 +51,35 @@ export const markNotificationAsRead = async () => {
   } catch (error) {
     console.log(error);
   }
+};
+
+export const getPendingTickets = async () => {
+  try {
+    const response = await api.get("/api/Ticket/getPendingTickets"); // Use your actual endpoint
+    return response.data;
+  } catch (error) {
+    //  console.error("Error fetching ticket list:", error);
+    throw error;
+  }
+};
+
+export const createTicketHubConnection = () => {
+  const connection = new signalR.HubConnectionBuilder()
+    .withUrl(`${api.defaults.baseURL}/ticketHub`, {
+      skipNegotiation: false,
+      transport: signalR.HttpTransportType.WebSockets,
+    })
+    .withAutomaticReconnect({
+      nextRetryDelayInMilliseconds: (retryContext) => {
+        if (retryContext.previousRetryCount === 0) return 0;
+        if (retryContext.previousRetryCount === 1) return 2000;
+        if (retryContext.previousRetryCount === 2) return 10000;
+        if (retryContext.previousRetryCount === 3) return 30000;
+        return null;
+      },
+    })
+    .configureLogging(signalR.LogLevel.Information)
+    .build();
+
+  return connection;
 };

@@ -2,7 +2,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 const RedirectIfAuth = ({ children }) => {
-  const { user, authType, loading } = useAuth();
+  const { user, userMenus, authType, loading } = useAuth();
 
   if (loading) {
     return (
@@ -14,14 +14,21 @@ const RedirectIfAuth = ({ children }) => {
     );
   }
 
-  // If ANY user is authenticated (admin OR employee), redirect them
+  // If user is authenticated
   if (user) {
-    // Admin -> redirect to admin dashboard
+    // Admin -> redirect to first available menu
     if (authType === "admin") {
-      return <Navigate to="/admin/dashboard" replace />;
+      if (userMenus && userMenus.length > 0) {
+        const firstMenu = userMenus[0].route;
+        return <Navigate to={firstMenu} replace />;
+      } else {
+        // Admin with no menus - should not have access
+        // Logout and show error, or redirect to access denied
+        return <Navigate to="/access-denied" replace />;
+      }
     }
     // Employee -> redirect to ticket page
-    else {
+    if (authType === "employee") {
       return <Navigate to="/Ticket" replace />;
     }
   }

@@ -10,6 +10,7 @@ import {
   FaChevronDown,
   FaTimes,
   FaSignOutAlt,
+  FaLaptopMedical,
 } from "react-icons/fa";
 
 const Sidebar = ({ isOpen, onClose }) => {
@@ -23,6 +24,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     "IT Support": FaTicketAlt,
     Inventory: FaBox,
     Teachers: FaUsers,
+    Clinic: FaLaptopMedical,
   };
 
   // Default hardcoded menus (for employees or fallback)
@@ -37,6 +39,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         { path: "/admin/tickets/printid", label: "Print ID's" },
         { path: "/admin/tickets/closed", label: "Closed Tickets" },
         { path: "/admin/tickets/create", label: "Create Ticket" },
+        { path: "/admin/clinic/clinic", label: "Clinic" },
       ],
     },
     { path: "/admin/inventory", label: "Inventory", icon: FaBox },
@@ -99,7 +102,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         {/* Logo */}
         <div className="flex items-center justify-between p-4 border-b border-slate-700 shrink-0">
           <h1 className="text-xl font-bold">
-            {authType === "admin" ? "Admin Panel" : "Employee Panel"}
+            {authType === "admin" ? "AUS Dashboard System" : "Employee Panel"}
           </h1>
           <button onClick={onClose} className="lg:hidden">
             <FaTimes className="w-6 h-6" />

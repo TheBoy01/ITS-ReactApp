@@ -5,6 +5,15 @@ import Button from "../components/ui/Button";
 import AuthCard from "../components/layout/AuthCard";
 import AuthContext from "../contexts/AuthContext";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/solid";
+import {
+  SwalSuccess,
+  SwalError,
+  SwalWarning,
+  ToastError,
+  SwalConfirm,
+  ToastInfo,
+  SwalInfoDynamic,
+} from "../utils/SwalAlert";
 
 export default function LoginPage() {
   const { login } = useContext(AuthContext);
@@ -34,12 +43,22 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
-      const authUser = await login(form.username, form.password, form.remember);
-
-      if (authUser.role.toLowerCase() === "admin") {
-        console.log("Navigating to admin dashboard");
-        navigate("/admin/dashboard", { replace: true });
+      const result = await login(form.username, form.password, form.remember);
+      console.log("Login result:", result.menus);
+      // Admin login
+      if (result.menus !== undefined) {
+        if (result.menus.length > 0) {
+          // Has menus - navigate to first menu
+          navigate(result.menus[0].route, { replace: true });
+        } else {
+          // No menus - access denied
+          setError(
+            "You don't have access to any menus. Contact administrator.",
+          );
+          setLoading(false);
+        }
       } else {
+        // Employee login
         navigate("/tickets", { replace: true });
       }
     } catch (err) {
@@ -82,7 +101,7 @@ export default function LoginPage() {
               )}
             </button>
           </div>
-
+          {/*}
           <div className="flex items-center space-x-2">
             <input
               type="checkbox"
@@ -93,7 +112,7 @@ export default function LoginPage() {
             />
             <label className="text-sm text-gray-700">Keep me logged in</label>
           </div>
-
+          */}
           {error && <div className="text-sm text-red-600">{error}</div>}
 
           <Button type="submit" disabled={loading}>
