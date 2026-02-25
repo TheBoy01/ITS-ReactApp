@@ -3,11 +3,14 @@ import {
   getStudentByStudentIDNo,
   createRecordValidation,
   createRecordAsync,
+  getClinicRecordListByClinicDept,
+  createNewRecordConnection,
+  getRecordAttachments,
+  updateClinicRecordAsync,
   //updateRecordValidation,
 } from "../../../API/ClinicAPI";
 import AuthContext from "../../../contexts/AuthContext";
 import { SwalError, SwalConfirm } from "../../../utils/SwalAlert";
-
 // ─────────────────────────────────────────────────────────────
 // useAsyncTask
 //
@@ -221,13 +224,16 @@ const fetchStudentById = async (id) => {
   return result;
 };
 
+const date = new Date();
+date.setHours(date.getHours() + 4);
+
 const EMPTY_FORM = {
   studentId: "",
   studentName: "",
   grade: "",
   section: "",
   photoUrl: "",
-  visitDate: new Date().toISOString().slice(0, 16),
+  visitDate: date.toISOString().slice(0, 16),
   nal: "",
   condition: "",
   actionTaken: "",
@@ -297,7 +303,7 @@ const EditTextarea = ({ label, required, maxLength, ...props }) => {
   );
 };
 
-const Attachments = ({ files, onChange }) => {
+const Attachments = ({ files = [], onChange }) => {
   const ref = useRef();
   const [err, setErr] = useState("");
   const pick = (e) => {
@@ -324,7 +330,9 @@ const Attachments = ({ files, onChange }) => {
       <Label>
         Photo Attachments{" "}
         <span className="font-normal normal-case text-slate-500">
-          (max 3 MB each)
+          (max 3 MB total)
+          {files.length > 0 &&
+            ` - ${fmtBytes(files.reduce((sum, f) => sum + f.size, 0))} used`}
         </span>
       </Label>
       <button
@@ -352,7 +360,7 @@ const Attachments = ({ files, onChange }) => {
           {files.map((f, i) => (
             <div key={i} className="relative w-16 h-16 group">
               <img
-                src={f.preview}
+                src={f.preview ?? f.downloadUrl}
                 className="object-cover w-full h-full border rounded-lg border-slate-200"
                 alt=""
               />
@@ -388,6 +396,7 @@ const Clinic = () => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [isEditing, setIsEditing] = useState(false);
   const [records, setRecords] = useState([]);
+  const [recordsLoading, setRecordsLoading] = useState(false); // Add loading state
   const [idInput, setIdInput] = useState("");
   const [lookupState, setLookupState] = useState("idle");
   const [lookupError, setLookupError] = useState("");
@@ -399,8 +408,74 @@ const Clinic = () => {
   const [staffFilter, setStaffFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [sortField, setSortField] = useState("dateTime");
+  const [sortField, setSortField] = useState("visitDate");
   const [sortOrder, setSortOrder] = useState("desc");
+
+  const [viewModalRecord, setViewModalRecord] = useState(null);
+  const [studentCache, setStudentCache] = useState({});
+
+  // ✅ Load records when component mounts
+  useEffect(() => {
+    loadRecords();
+  }, []);
+
+  // ✅ Function to load records from API
+  const loadRecords = async () => {
+    try {
+      setRecordsLoading(true);
+      const data = await getClinicRecordListByClinicDept(); // or user.empCode, depending on your API
+      setRecords(data || []);
+    } catch (error) {
+      console.error("Failed to load records:", error);
+      SwalError("Failed to load records. Please try again.");
+    } finally {
+      setRecordsLoading(false);
+    }
+  };
+
+  // ✅ SignalR Connection Setup
+  useEffect(() => {
+    const connection = createNewRecordConnection();
+    let isMounted = true; // ✅ track if still mounted
+
+    connection.onreconnecting(() => console.log("SignalR Reconnecting..."));
+    connection.onreconnected(() => console.log("SignalR Reconnected"));
+    connection.onclose((err) => console.log("SignalR Closed", err));
+
+    const startConnection = async () => {
+      try {
+        await connection.start();
+        if (isMounted) console.log("SignalR Connected");
+      } catch (err) {
+        if (isMounted) {
+          console.error("SignalR Connection Error:", err);
+          setTimeout(startConnection, 5000); // only retry if still mounted
+        }
+      }
+    };
+
+    startConnection();
+
+    connection.on("ReceiveNewRecord", (newRecord) => {
+      setRecords((prev) => {
+        if (prev.some((r) => r.recordNo === newRecord.recordNo)) return prev;
+        return [newRecord, ...prev];
+      });
+    });
+
+    connection.on("ReceiveRecordUpdate", (updatedRecord) => {
+      setRecords((prev) =>
+        prev.map((r) =>
+          r.recordNo === updatedRecord.recordNo ? updatedRecord : r,
+        ),
+      );
+    });
+
+    return () => {
+      isMounted = false; // ✅ cancel retry on unmount
+      connection.stop();
+    };
+  }, []);
 
   useEffect(() => {
     if (!idInput.trim()) {
@@ -484,7 +559,7 @@ const Clinic = () => {
   const resetForm = () => {
     setForm({
       ...EMPTY_FORM,
-      visitDate: new Date().toISOString().slice(0, 16),
+      visitDate: date.toISOString().slice(0, 16),
     });
     setIdInput("");
     setLookupState("idle");
@@ -501,6 +576,10 @@ const Clinic = () => {
       const ClinicRecordDTO = new FormData();
 
       // Append normal fields
+
+      if (isEditing) {
+        ClinicRecordDTO.append("RecordNo", form.recordNo);
+      }
       ClinicRecordDTO.append("studentId", form.studentId);
       ClinicRecordDTO.append("VisitDate", form.visitDate);
       ClinicRecordDTO.append("NAL", form.nal);
@@ -508,20 +587,50 @@ const Clinic = () => {
       ClinicRecordDTO.append("ActionTaken", form.actionTaken);
       ClinicRecordDTO.append("NurseAttendant", form.nurseAttendant);
       ClinicRecordDTO.append("EmpCode", form.empCode);
+      ClinicRecordDTO.append(
+        "FileSize",
+        form.attachments.reduce((sum, att) => sum + att.size, 0),
+      );
 
       // Append files
-      if (form.attachments) {
-        form.attachments.forEach((f) => {
-          ClinicRecordDTO.append("Attachments", f.file, f.name); // append the actual File object
-        });
+      //if (form.attachments) {
+      // form.attachments.forEach((f) => {
+      //    if (f.isExisting) return; // ✅ don't re-upload existing attachments
+      //  console.log("Appending file to DTO:", f);
+      //  ClinicRecordDTO.append("Attachments", f.file, f.name); // append the actual File object
+      //  });
+      //  }
+      const attachments = form.attachments ?? [];
+      ClinicRecordDTO.append(
+        "FileSize",
+        attachments.reduce((sum, att) => sum + att.size, 0),
+      );
+      // Handle attachments — re-fetch existing ones as blobs, upload new ones as-is
+      if (attachments.length > 0) {
+        for (const f of attachments) {
+          if (f.isExisting) {
+            try {
+              const response = await fetch(f.downloadUrl);
+              const blob = await response.blob();
+              const file = new File([blob], f.name, { type: blob.type });
+              ClinicRecordDTO.append("Attachments", file, f.name);
+            } catch (err) {
+              console.error(
+                "Failed to re-fetch existing attachment:",
+                f.name,
+                err,
+              );
+            }
+          } else {
+            ClinicRecordDTO.append("Attachments", f.file, f.name);
+          }
+        }
       }
-      // console.log("NAL:", ClinicRecordDTO.get("Attachments"));
-      //  console.log("Submitting form with DTO:", ClinicRecordDTO);
 
-      const result = isEditing
-        ? await createRecordValidation(ClinicRecordDTO)
-        : await createRecordValidation(ClinicRecordDTO);
-
+      //const result = isEditing
+      //? await createRecordValidation(ClinicRecordDTO)
+      // : await createRecordValidation(ClinicRecordDTO);
+      const result = await createRecordValidation(ClinicRecordDTO);
       if (!result.isSuccessful) {
         SwalError(`Failed: ${result.status}`);
         return;
@@ -539,12 +648,14 @@ const Clinic = () => {
 
       resetForm(); // reset immediately
 
+      // setTab("records"); // ✅ ADD THIS LINE - Switch to records tab
+
       // Step 3: fire the actual save as a background task
 
       run(
         () =>
           isUpdate
-            ? yourActualUpdateAPI(snapshot)
+            ? updateClinicRecordAsync(ClinicRecordDTO)
             : createRecordAsync(ClinicRecordDTO),
         {
           label: isUpdate
@@ -579,12 +690,49 @@ const Clinic = () => {
     }
   };
 
-  const handleEdit = (record) => {
-    setForm(record);
-    setIdInput(record.studentId);
-    setLookupState("found");
-    setIsEditing(true);
-    setTab("create");
+  const handleView = (record) => {
+    setViewModalRecord(record);
+  };
+
+  const handleEdit = async (record) => {
+    let existingAttachments = [];
+
+    try {
+      const files = await getRecordAttachments(
+        record.recordNo,
+        record.studentId,
+      );
+      existingAttachments = (files ?? []).map((att) => ({
+        file: null, // no File object for existing
+        preview: att.downloadUrl, // ✅ use downloadUrl as preview
+        name: att.fileName,
+        size: att.fileSize ?? att.size ?? 0,
+        downloadUrl: att.downloadUrl, // keep original too
+        id: att.id,
+        isExisting: true, // flag so you can skip re-uploading
+      }));
+
+      setForm({
+        ...record,
+        attachments: existingAttachments, // ✅ normalized shape
+        recordNo: parseInt(record.recordNo, 10), // ensure recordNo is included
+      });
+
+      setIdInput(String(record.studentId ?? ""));
+      setLookupState("found");
+      setIsEditing(true);
+      setTab("create");
+    } catch (error) {
+      // Handle validation errors (step 1 errors)
+      if (error.response?.data?.errors) {
+        const msgs = Object.entries(error.response.data.errors)
+          .map(([f, m]) => `• ${f.replace(/([A-Z])/g, " $1").trim()}: ${m[0]}`)
+          .join("\n");
+        SwalError(`Validation Failed:\n\n${msgs}`);
+      } else {
+        SwalError(error.response?.data?.title || error.message || "Failed");
+      }
+    }
   };
 
   const handleDelete = (id) => {
@@ -609,18 +757,31 @@ const Clinic = () => {
     setCurrentPage(1);
   };
 
-  const filtered = records.filter((r) => {
-    const s = search.toLowerCase();
-    return (
-      (!s ||
-        r.studentName?.toLowerCase().includes(s) ||
-        r.studentId?.toLowerCase().includes(s) ||
-        r.nal?.toLowerCase().includes(s)) &&
-      (!dateFrom || new Date(r.dateTime) >= new Date(dateFrom)) &&
-      (!dateTo || new Date(r.dateTime) <= new Date(dateTo)) &&
-      (!staffFilter ||
-        r.nurseAttendant?.toLowerCase().includes(staffFilter.toLowerCase()))
-    );
+  const searchText = search?.toLowerCase().trim();
+  const staffText = staffFilter?.toLowerCase().trim();
+
+  const fromDate = dateFrom ? new Date(dateFrom) : null;
+  const toDate = dateTo ? new Date(dateTo) : null;
+
+  if (toDate) {
+    toDate.setHours(23, 59, 59, 999);
+  }
+
+  const filtered = records.filter((record) => {
+    const visitDate = new Date(record.visitDate);
+
+    const matchesSearch =
+      !searchText ||
+      record.studentName?.toLowerCase().includes(searchText) ||
+      record.nal?.toLowerCase().includes(searchText);
+
+    const matchesFrom = !fromDate || visitDate >= fromDate;
+    const matchesTo = !toDate || visitDate <= toDate;
+
+    const matchesStaff =
+      !staffText || record.nurseAttendant?.toLowerCase().includes(staffText);
+
+    return matchesSearch && matchesFrom && matchesTo && matchesStaff;
   });
 
   const sorted = [...filtered].sort((a, b) => {
@@ -636,6 +797,7 @@ const Clinic = () => {
   });
 
   const totalPages = Math.ceil(sorted.length / itemsPerPage);
+
   const paginatedRecords = sorted.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage,
@@ -661,6 +823,288 @@ const Clinic = () => {
         </span>
       );
     return null;
+  };
+
+  const getStudentInfo = async (studentId) => {
+    // Check cache first
+    if (studentCache[studentId]) {
+      return studentCache[studentId];
+    }
+
+    // Fetch from API
+    try {
+      const data = await getStudentByStudentIDNo(studentId);
+
+      setStudentCache((prev) => ({ ...prev, [studentId]: data }));
+      return data;
+    } catch (error) {
+      console.error("Failed to load student:", error);
+      return null;
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // ViewModal Component
+  // ─────────────────────────────────────────────────────────────
+  const ViewModal = ({ record, onClose, onEdit, canEdit, getStudentInfo }) => {
+    const [studentData, setStudentData] = useState(null);
+    const [attachments, setAttachments] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+
+    useEffect(() => {
+      if (record) {
+        loadStudentData();
+        loadAttachments();
+      }
+    }, [record]);
+
+    const loadStudentData = async () => {
+      try {
+        setLoading(true);
+        const data = await getStudentInfo(record.studentId); // Uses cache
+        setStudentData(data);
+      } catch (error) {
+        console.error("Failed to load student data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const loadAttachments = async () => {
+      try {
+        setAttachmentsLoading(true);
+        //console.log( "Loading attachments for record:",record.recordNo, " ", record.studentId,);
+        const files = await getRecordAttachments(
+          record.recordNo,
+          record.studentId,
+        );
+        setAttachments(files);
+      } catch (error) {
+        console.error("Failed to load attachments:", error);
+      } finally {
+        setAttachmentsLoading(false);
+      }
+    };
+
+    if (!record) return null;
+
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+        onClick={onClose}
+      >
+        <div
+          className="relative w-full max-w-4xl overflow-hidden bg-white shadow-2xl max-h-[90vh] overflow-y-auto rounded-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-gradient-to-br from-teal-400 to-teal-600">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-10 h-10 bg-white rounded-full">
+                <i className="text-teal-600 fa-solid fa-file-medical" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white">
+                  Clinic Record Details
+                </h2>
+                <p className="text-xs text-teal-50">
+                  Record No: {record.recordNo}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="flex items-center justify-center w-8 h-8 text-white transition-colors rounded-full hover:bg-white/20"
+            >
+              <i className="fa-solid fa-xmark" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-6">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <i className="text-3xl text-teal-400 fa-solid fa-spinner fa-spin" />
+                <p className="ml-3 text-sm text-slate-600">
+                  Loading student information...
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Student Info */}
+                <div className="flex items-start gap-6 pb-6 mb-6 border-b border-slate-200">
+                  <div className="flex-shrink-0 w-24 h-24 overflow-hidden border-4 border-white rounded-full shadow-lg bg-slate-100">
+                    {studentData?.photoUrl ? (
+                      <img
+                        src={studentData.photoUrl}
+                        alt={studentData.studentName}
+                        className="object-cover w-full h-full"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center w-full h-full text-slate-300">
+                        <i className="text-4xl fa-solid fa-user" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-2xl font-bold text-slate-800">
+                      {studentData?.studentName}
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div>
+                        <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500">
+                          Student ID
+                        </p>
+                        <p className="mt-1 font-mono text-sm font-medium text-slate-800">
+                          {record.studentId}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500">
+                          Grade & Class
+                        </p>
+                        <p className="mt-1 text-sm text-slate-800">
+                          {studentData?.classDept}: {studentData?.groupLevel} -{" "}
+                          {studentData?.class}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500">
+                          Gender
+                        </p>
+                        <p className="mt-1 text-sm text-slate-800">
+                          {studentData?.gender || "—"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500">
+                          Nationality
+                        </p>
+                        <p className="mt-1 text-sm text-slate-800">
+                          {studentData?.nationality || "—"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Clinic Details */}
+                <div className="grid grid-cols-1 gap-6 mb-6 md:grid-cols-2">
+                  <div>
+                    <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-2">
+                      Visit Date & Time
+                    </p>
+                    <p className="text-sm text-slate-800">
+                      {fmtDate(record.visitDate)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-2">
+                      Attended By
+                    </p>
+                    <p className="text-sm text-slate-800">
+                      {record.nurseAttendant}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-2">
+                      NAL – Nature of Accident / Illness
+                    </p>
+                    <p className="text-sm leading-relaxed text-slate-800">
+                      {record.nal}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-2">
+                      Condition Required for First Aid
+                    </p>
+                    <p className="text-sm leading-relaxed text-slate-800">
+                      {record.condition}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-2">
+                      Action Taken
+                    </p>
+                    <p className="text-sm leading-relaxed text-slate-800">
+                      {record.actionTaken}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Attachments */}
+                <div className="pt-6 mt-6 border-t border-slate-200">
+                  <p className="text-[10px] font-bold tracking-widest uppercase text-slate-600 mb-3">
+                    Attachments
+                  </p>
+
+                  {attachmentsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <i className="fa-solid fa-spinner fa-spin" />
+                      Loading attachments...
+                    </div>
+                  ) : attachments?.length > 0 ? (
+                    <div className="flex flex-wrap gap-3">
+                      {attachments.map((att) => (
+                        <a
+                          key={att.id ?? att.fileName}
+                          href={att.downloadUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="relative group"
+                        >
+                          <img
+                            src={att.downloadUrl}
+                            alt={att.fileName}
+                            className="object-cover transition-opacity border rounded-lg w-28 h-28 border-slate-200 group-hover:opacity-75"
+                          />
+
+                          <div className="absolute inset-0 flex items-center justify-center transition-opacity rounded-lg opacity-0 bg-black/50 group-hover:opacity-100">
+                            <i className="text-2xl text-white fa-solid fa-download" />
+                          </div>
+
+                          <p className="text-[9px] text-slate-500 text-center mt-1 truncate max-w-[112px]">
+                            {att.fileName}
+                          </p>
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">No attachments</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex gap-3 px-6 py-4 border-t bg-slate-50 border-slate-200">
+            {canEdit && (
+              <button
+                onClick={() => {
+                  onEdit(record);
+                  onClose();
+                }}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white transition-colors bg-teal-500 hover:bg-teal-600 rounded-xl"
+              >
+                <i className="fa-solid fa-pen" />
+                Edit Record
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold transition-colors bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -997,7 +1441,14 @@ const Clinic = () => {
                 </div>
               </div>
 
-              {filtered.length === 0 ? (
+              {recordsLoading && lookupState ? (
+                <div className="flex items-center justify-center p-16 bg-white border rounded-2xl border-slate-100">
+                  <i className="text-3xl text-teal-400 fa-solid fa-spinner fa-spin" />
+                  <p className="ml-3 text-sm text-slate-600">
+                    Loading records...
+                  </p>
+                </div>
+              ) : filtered.length === 0 ? (
                 <div className="p-16 text-center bg-white border rounded-2xl border-slate-100">
                   <i className="block mb-3 text-4xl fa-solid fa-folder-open text-slate-200" />
                   <p className="text-sm font-medium text-slate-600">
@@ -1020,7 +1471,7 @@ const Clinic = () => {
                           {[
                             { key: "studentName", label: "Student Name" },
                             { key: "studentId", label: "Student ID" },
-                            { key: "dateTime", label: "Date & Time" },
+                            { key: "visitDate", label: "Date & Time" },
                           ].map(({ key, label }) => (
                             <th
                               key={key}
@@ -1057,7 +1508,7 @@ const Clinic = () => {
                       <tbody>
                         {paginatedRecords.map((record, idx) => (
                           <tr
-                            key={record.id}
+                            key={record.recordNo}
                             className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}
                           >
                             <td className="px-4 py-3 font-medium text-slate-800">
@@ -1067,7 +1518,7 @@ const Clinic = () => {
                               {record.studentId}
                             </td>
                             <td className="px-4 py-3 text-slate-600">
-                              {fmtDate(record.dateTime)}
+                              {fmtDate(record.visitDate)}
                             </td>
                             <td className="px-4 py-3 text-slate-600">
                               <div className="max-w-xs truncate">
@@ -1079,6 +1530,15 @@ const Clinic = () => {
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-center gap-2">
+                                {canView && (
+                                  <button
+                                    onClick={() => handleView(record)}
+                                    title="View"
+                                    className="flex items-center justify-center w-8 h-8 text-xs text-teal-500 transition-colors rounded-lg bg-teal-50 hover:bg-teal-100"
+                                  >
+                                    <i className="fa-solid fa-eye" />
+                                  </button>
+                                )}
                                 {canEdit && (
                                   <button
                                     onClick={() => handleEdit(record)}
@@ -1167,6 +1627,15 @@ const Clinic = () => {
           )}
         </div>
       </div>
+
+      {/* ✅ View Modal */}
+      <ViewModal
+        record={viewModalRecord}
+        onClose={() => setViewModalRecord(null)}
+        onEdit={handleEdit}
+        canEdit={canEdit}
+        getStudentInfo={getStudentInfo}
+      />
 
       {/* Floating task spinner — auto-shows/hides based on tasks */}
       <TaskToast tasks={tasks} />
