@@ -27,6 +27,20 @@ export const createRecordValidation = async (ClinicRecordDTO) => {
   return response.data; // Returns { isSuccessful: boolean, status: string }
 };
 
+export const UpdateRecordValidation = async (ClinicRecordDTO) => {
+  const response = await API.post(
+    "/api/Clinic/UpdateRecordValidation",
+    ClinicRecordDTO,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    },
+  );
+
+  return response.data; // Returns { isSuccessful: boolean, status: string }
+};
+
 export const createRecordAsync = async (ClinicRecordDTO) => {
   const response = await API.post(
     "/api/Clinic/createRecordAsync",
@@ -42,9 +56,7 @@ export const createRecordAsync = async (ClinicRecordDTO) => {
 
 export const getClinicRecordListByClinicDept = async () => {
   try {
-    const response = await API.get(
-      "/api/Clinic/GetClinicRecordListByClinicDept",
-    );
+    const response = await API.get("/api/Clinic/GetClinicRecordList");
     return response.data;
   } catch (error) {
     //  console.error("Error fetching ticket list:", error);

@@ -102,7 +102,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         {/* Logo */}
         <div className="flex items-center justify-between p-4 border-b border-slate-700 shrink-0">
           <h1 className="text-xl font-bold">
-            {authType === "admin" ? "AUS Dashboard System" : "Employee Panel"}
+            {authType === "admin" ? "AUS Dashboard" : "Employee Panel"}
           </h1>
           <button onClick={onClose} className="lg:hidden">
             <FaTimes className="w-6 h-6" />
@@ -208,7 +208,8 @@ const Sidebar = ({ isOpen, onClose }) => {
             <div className="flex-1">
               <p className="text-sm font-medium">{user?.name || "User"}</p>
               <p className="text-xs text-slate-400">
-                {authType === "admin" ? "Administrator" : "Employee"}
+                {user.position}{" "}
+                {/*  {authType === "admin" ? "Administrator" : "Employee"} */}
               </p>
             </div>
           </div>

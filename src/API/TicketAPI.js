@@ -83,3 +83,23 @@ export const createTicketHubConnection = () => {
 
   return connection;
 };
+
+export const getStudentListForPrinting = async () => {
+  try {
+    const response = await api.get("/api/Ticket/GetStudentListForPrinting"); // Use your actual endpoint
+    return response.data;
+  } catch (error) {
+    //  console.error("Error fetching ticket list:", error);
+    throw error;
+  }
+};
+
+export const downloadIDCards = async () => {
+  try {
+    const response = await api.get("/api/Ticket/downloadIDCards"); // Use your actual endpoint
+    return response.data;
+  } catch (error) {
+    //  console.error("Error fetching ticket list:", error);
+    throw error;
+  }
+};

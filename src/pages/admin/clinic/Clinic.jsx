@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useContext, useCallback } from "react";
 import {
   getStudentByStudentIDNo,
   createRecordValidation,
+  UpdateRecordValidation,
   createRecordAsync,
   getClinicRecordListByClinicDept,
   createNewRecordConnection,
@@ -9,6 +10,7 @@ import {
   updateClinicRecordAsync,
   //updateRecordValidation,
 } from "../../../API/ClinicAPI";
+import { getClinicReferences } from "../../../API/ReferencesAPI";
 import AuthContext from "../../../contexts/AuthContext";
 import { SwalError, SwalConfirm } from "../../../utils/SwalAlert";
 // ─────────────────────────────────────────────────────────────
@@ -33,7 +35,7 @@ export const useAsyncTask = () => {
 
   const run = useCallback(
     async (asyncFn, { label = "Processing…", onSuccess, onError } = {}) => {
-      const id = crypto.randomUUID();
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
 
       setTasks((prev) => [...prev, { id, label, status: "loading" }]);
 
@@ -238,6 +240,7 @@ const EMPTY_FORM = {
   condition: "",
   actionTaken: "",
   nurseAttendant: "",
+  clinicLocation: "",
   attachments: [],
   fileSize: 0,
 };
@@ -414,9 +417,12 @@ const Clinic = () => {
   const [viewModalRecord, setViewModalRecord] = useState(null);
   const [studentCache, setStudentCache] = useState({});
 
+  const [refClinicDepts, setRefClinicDepts] = useState([]);
+
   // ✅ Load records when component mounts
   useEffect(() => {
     loadRecords();
+    loadReferences();
   }, []);
 
   // ✅ Function to load records from API
@@ -431,6 +437,16 @@ const Clinic = () => {
     } finally {
       setRecordsLoading(false);
     }
+  };
+  const loadReferences = async () => {
+    try {
+      const refs = await getClinicReferences();
+      setRefClinicDepts(refs.refClinicDept || []);
+    } catch (err) {
+      SwalError("Something went wrong", "Could not load references.");
+      console.error(err);
+    }
+    // ✅ remove the setLoading(false) line
   };
 
   // ✅ SignalR Connection Setup
@@ -488,7 +504,8 @@ const Clinic = () => {
         grade: "",
         section: "",
         photoUrl: "",
-        empCode: user.empCode,
+        nurseAttendant: p.nurseAttendant || user.name || "",
+        empCode: p.empCode || user.empCode,
       }));
       return;
     }
@@ -508,7 +525,11 @@ const Clinic = () => {
           birthDate: s.dateOfBirth,
           nationality: s.nationality,
           photoUrl: s.photoUrl,
-          empCode: user.empCode,
+          empCode: p.empCode || user.empCode,
+          fatherContact: s.fatherContact,
+          motherContact: s.motherContact,
+          fatherEmail: s.fatherEmail,
+          motherEmail: s.motherEmail,
         }));
         setLookupState("found");
         setLookupError("");
@@ -526,12 +547,17 @@ const Clinic = () => {
           birthDate: "",
           nationality: "",
           photoUrl: "",
-          empCode: user.empCode,
+          empCode: p.empCode || user.empCode,
         }));
       }
     }, 600);
     return () => clearTimeout(debounceRef.current);
   }, [idInput]);
+
+  // Add this useEffect to reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, dateFrom, dateTo, staffFilter]);
 
   if (loading)
     return (
@@ -560,6 +586,7 @@ const Clinic = () => {
     setForm({
       ...EMPTY_FORM,
       visitDate: date.toISOString().slice(0, 16),
+      nurseAttendant: user.name || "",
     });
     setIdInput("");
     setLookupState("idle");
@@ -587,6 +614,7 @@ const Clinic = () => {
       ClinicRecordDTO.append("ActionTaken", form.actionTaken);
       ClinicRecordDTO.append("NurseAttendant", form.nurseAttendant);
       ClinicRecordDTO.append("EmpCode", form.empCode);
+      ClinicRecordDTO.append("ClinicLocation", form.clinicLocation);
       ClinicRecordDTO.append(
         "FileSize",
         form.attachments.reduce((sum, att) => sum + att.size, 0),
@@ -627,10 +655,10 @@ const Clinic = () => {
         }
       }
 
-      //const result = isEditing
-      //? await createRecordValidation(ClinicRecordDTO)
-      // : await createRecordValidation(ClinicRecordDTO);
-      const result = await createRecordValidation(ClinicRecordDTO);
+      const result = isEditing
+        ? await UpdateRecordValidation(ClinicRecordDTO)
+        : await createRecordValidation(ClinicRecordDTO);
+      //const result = await createRecordValidation(ClinicRecordDTO);
       if (!result.isSuccessful) {
         SwalError(`Failed: ${result.status}`);
         return;
@@ -703,19 +731,25 @@ const Clinic = () => {
         record.studentId,
       );
       existingAttachments = (files ?? []).map((att) => ({
-        file: null, // no File object for existing
-        preview: att.downloadUrl, // ✅ use downloadUrl as preview
+        file: null,
+        preview: att.downloadUrl,
         name: att.fileName,
         size: att.fileSize ?? att.size ?? 0,
-        downloadUrl: att.downloadUrl, // keep original too
+        downloadUrl: att.downloadUrl,
         id: att.id,
-        isExisting: true, // flag so you can skip re-uploading
+        isExisting: true,
       }));
+
+      const matchedDept = refClinicDepts.find(
+        (d) => d.clinicDeptDesc === record.clinicLocation,
+      );
 
       setForm({
         ...record,
-        attachments: existingAttachments, // ✅ normalized shape
-        recordNo: parseInt(record.recordNo, 10), // ensure recordNo is included
+        attachments: existingAttachments,
+        recordNo: parseInt(record.recordNo, 10),
+        empCode: record.empCode,
+        clinicLocation: matchedDept ? String(matchedDept.deptID) : "", // ✅ handle both field names
       });
 
       setIdInput(String(record.studentId ?? ""));
@@ -723,7 +757,6 @@ const Clinic = () => {
       setIsEditing(true);
       setTab("create");
     } catch (error) {
-      // Handle validation errors (step 1 errors)
       if (error.response?.data?.errors) {
         const msgs = Object.entries(error.response.data.errors)
           .map(([f, m]) => `• ${f.replace(/([A-Z])/g, " $1").trim()}: ${m[0]}`)
@@ -757,7 +790,7 @@ const Clinic = () => {
     setCurrentPage(1);
   };
 
-  const searchText = search?.toLowerCase().trim();
+  const searchText = search?.trim(); // ✅ Remove toLowerCase() here
   const staffText = staffFilter?.toLowerCase().trim();
 
   const fromDate = dateFrom ? new Date(dateFrom) : null;
@@ -770,10 +803,13 @@ const Clinic = () => {
   const filtered = records.filter((record) => {
     const visitDate = new Date(record.visitDate);
 
+    // ✅ Apply toLowerCase() individually to each string field
     const matchesSearch =
       !searchText ||
-      record.studentName?.toLowerCase().includes(searchText) ||
-      record.nal?.toLowerCase().includes(searchText);
+      record.studentName?.toLowerCase().includes(searchText.toLowerCase()) ||
+      record.studentId?.toString().includes(searchText) || // ✅ No toLowerCase for number search
+      record.nal?.toLowerCase().includes(searchText.toLowerCase()) ||
+      record.clinicLocation?.toLowerCase().includes(searchText.toLowerCase());
 
     const matchesFrom = !fromDate || visitDate >= fromDate;
     const matchesTo = !toDate || visitDate <= toDate;
@@ -885,6 +921,10 @@ const Clinic = () => {
       } finally {
         setAttachmentsLoading(false);
       }
+    };
+
+    const handlePrint = () => {
+      window.print();
     };
 
     if (!record) return null;
@@ -1001,10 +1041,18 @@ const Clinic = () => {
                   </div>
                   <div>
                     <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-2">
-                      Attended By
+                      Attended Bys
                     </p>
                     <p className="text-sm text-slate-800">
                       {record.nurseAttendant}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold tracking-widest uppercase text-slate-500 mb-2">
+                      Clinic Location
+                    </p>
+                    <p className="text-sm text-slate-800">
+                      {record.clinicLocation || "—"}
                     </p>
                   </div>
                 </div>
@@ -1081,6 +1129,181 @@ const Clinic = () => {
             )}
           </div>
 
+          <div id="clinic-print-area" className="hidden">
+            <div className="max-w-2xl p-10 mx-auto font-sans">
+              {/* Header */}
+              <div className="pb-4 mb-6 text-center border-b-2 border-teal-500">
+                <h1 className="m-0 text-xl font-bold text-teal-600">
+                  CLINIC RECORD
+                </h1>
+                <p className="mt-1 text-xs text-slate-500">Arab Unity School</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Record No: {record.recordNo}
+                </p>
+              </div>
+
+              {/* Student Information */}
+              <div className="mb-6">
+                <h2 className="text-[11px] font-bold tracking-widest uppercase text-slate-500 mb-3">
+                  Student Information
+                </h2>
+                <div className="flex-shrink-0 w-16 h-16 overflow-hidden border-2 border-teal-400 rounded-full bg-slate-100">
+                  {studentData?.photoUrl ? (
+                    <img
+                      src={studentData.photoUrl}
+                      alt={studentData?.studentName}
+                      className="object-cover w-full h-full"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center w-full h-full text-slate-300">
+                      <i className="text-2xl fa-solid fa-user" />
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">
+                      Student Name
+                    </p>
+                    <p className="text-sm font-semibold text-slate-800">
+                      {studentData?.studentName || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">
+                      Student ID
+                    </p>
+                    <p className="font-mono text-sm font-semibold text-slate-800">
+                      {record.studentId}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">
+                      Grade & Class
+                    </p>
+                    <p className="text-sm text-slate-800">
+                      {studentData?.classDept}: {studentData?.groupLevel} -{" "}
+                      {studentData?.class}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">
+                      Gender
+                    </p>
+                    <p className="text-sm text-slate-800">
+                      {studentData?.gender || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">
+                      Nationality
+                    </p>
+                    <p className="text-sm text-slate-800">
+                      {studentData?.nationality || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">
+                      Date of Birth
+                    </p>
+                    <p className="text-sm text-slate-800">
+                      {studentData?.dateOfBirth
+                        ? new Date(studentData.dateOfBirth).toLocaleDateString(
+                            "en-US",
+                            { year: "numeric", month: "short", day: "2-digit" },
+                          )
+                        : "—"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <hr className="mb-6 border-dashed border-slate-200" />
+
+              {/* Clinic Details */}
+              <div className="mb-6">
+                <h2 className="text-[11px] font-bold tracking-widest uppercase text-slate-500 mb-3">
+                  Clinic Details
+                </h2>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">
+                      Visit Date & Time
+                    </p>
+                    <p className="text-sm text-slate-800">
+                      {fmtDate(record.visitDate)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold mb-0.5">
+                      Clinic Location
+                    </p>
+                    <p className="text-sm text-slate-800">
+                      {record.clinicLocation || record.clinicLoc || "—"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* NAL */}
+                <div className="p-3 mb-3 border-l-4 border-teal-500 rounded-r-lg bg-slate-50">
+                  <p className="text-[10px] text-slate-400 uppercase font-bold mb-1.5">
+                    NAL – Nature of Accident / Illness
+                  </p>
+                  <p className="text-sm leading-relaxed text-slate-800">
+                    {record.nal}
+                  </p>
+                </div>
+
+                {/* Condition */}
+                <div className="p-3 mb-3 border-l-4 border-teal-500 rounded-r-lg bg-slate-50">
+                  <p className="text-[10px] text-slate-400 uppercase font-bold mb-1.5">
+                    Condition Required for First Aid
+                  </p>
+                  <p className="text-sm leading-relaxed text-slate-800">
+                    {record.condition}
+                  </p>
+                </div>
+
+                {/* Action Taken */}
+                <div className="p-3 border-l-4 border-teal-500 rounded-r-lg bg-slate-50">
+                  <p className="text-[10px] text-slate-400 uppercase font-bold mb-1.5">
+                    Action Taken
+                  </p>
+                  <p className="text-sm leading-relaxed text-slate-800">
+                    {record.actionTaken}
+                  </p>
+                </div>
+              </div>
+
+              {/* Signature Block */}
+              <div className="flex justify-end pt-6 mt-16 border-t border-slate-200">
+                <div className="text-center min-w-[200px]">
+                  <p className="text-sm font-bold text-slate-800 border-b border-slate-800 pb-1 mb-1.5">
+                    {record.nurseAttendant}
+                  </p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500">
+                    Registered Nurse
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Prepared by
+                  </p>
+                </div>
+              </div>
+
+              {/* Print Footer */}
+              <div className="pt-3 mt-8 text-center border-t border-dashed border-slate-200">
+                <p className="text-[10px] text-slate-300">
+                  Printed on{" "}
+                  {new Date().toLocaleString("en-US", {
+                    dateStyle: "long",
+                    timeStyle: "short",
+                  })}
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Footer */}
           <div className="flex gap-3 px-6 py-4 border-t bg-slate-50 border-slate-200">
             {canEdit && (
@@ -1095,6 +1318,20 @@ const Clinic = () => {
                 Edit Record
               </button>
             )}
+
+            <button
+              onClick={() => {
+                document.getElementById("clinic-print-area").style.display =
+                  "block";
+                window.print();
+                document.getElementById("clinic-print-area").style.display =
+                  "none";
+              }}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white transition-colors bg-slate-600 hover:bg-slate-700 rounded-xl"
+            >
+              <i className="fa-solid fa-print" />
+              Print
+            </button>
             <button
               onClick={onClose}
               className="flex items-center gap-2 px-4 py-2 text-sm font-semibold transition-colors bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl"
@@ -1130,7 +1367,7 @@ const Clinic = () => {
                 Clinic Records
               </p>
               <p className="text-[11px] text-slate-600 mt-0.5">
-                Health Management System
+                Arab Unity School
               </p>
             </div>
           </div>
@@ -1173,6 +1410,14 @@ const Clinic = () => {
                 <div className="flex flex-col gap-5 lg:col-span-1">
                   <div className="overflow-hidden bg-white border shadow-sm rounded-2xl border-slate-100">
                     <div className="relative flex items-end justify-center h-24 pb-0 bg-gradient-to-br from-teal-400 to-teal-600">
+                      {isEditing && form.recordNo && (
+                        <div className="absolute px-3 py-1 border rounded-full top-3 left-3 bg-white/20 backdrop-blur-sm border-white/30">
+                          <p className="font-mono text-xs font-semibold text-black">
+                            Record No.: #{form.recordNo}
+                          </p>
+                        </div>
+                      )}
+
                       <div className="absolute w-20 h-20 overflow-hidden border-4 border-white rounded-full shadow-lg -bottom-10 bg-slate-100">
                         {form.photoUrl && lookupState === "found" ? (
                           <img
@@ -1194,10 +1439,6 @@ const Clinic = () => {
                         <>
                           <p className="text-base font-bold leading-tight text-slate-800">
                             {form.studentName}
-                          </p>
-                          <p className="text-xs text-slate-600 mt-0.5">
-                            {form.grade}
-                            {form.section ? ` · ${form.section}` : ""}
                           </p>
                         </>
                       ) : (
@@ -1270,6 +1511,24 @@ const Clinic = () => {
                       value={form.gender}
                       placeholder="—"
                     />
+                    <ReadField
+                      label="Contact No."
+                      value={
+                        form.fatherContact || form.motherContact
+                          ? `${form.fatherContact} : ${form.motherContact}`
+                          : "—"
+                      }
+                      placeholder="—"
+                    />{" "}
+                    <ReadField
+                      label="Email Address"
+                      value={
+                        form.fatherEmail || form.motherEmail
+                          ? `${form.fatherEmail} : ${form.motherEmail}`
+                          : "—"
+                      }
+                      placeholder="—"
+                    />
                   </div>
                 </div>
 
@@ -1295,6 +1554,25 @@ const Clinic = () => {
                         onChange={handleChange}
                         placeholder="Nurse / staff name"
                       />
+                      <div>
+                        <Label required>Clinic Location</Label>
+                        <select
+                          name="clinicLocation"
+                          value={form.clinicLocation}
+                          onChange={handleChange}
+                          required
+                          className="..."
+                        >
+                          <option value="" disabled>
+                            Select clinic location…
+                          </option>
+                          {refClinicDepts.map((cat) => (
+                            <option key={cat.deptID} value={String(cat.deptID)}>
+                              {cat.clinicDeptDesc}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                     <EditTextarea
                       label="NAL – Nature of Accident / Illness"
@@ -1500,6 +1778,9 @@ const Clinic = () => {
                               />
                             </div>
                           </th>
+                          <th className="px-4 py-3 font-semibold text-left text-slate-700">
+                            Clinic Location
+                          </th>
                           <th className="px-4 py-3 font-semibold text-center text-slate-700">
                             Actions
                           </th>
@@ -1528,6 +1809,9 @@ const Clinic = () => {
                             <td className="px-4 py-3 text-slate-600">
                               {record.nurseAttendant}
                             </td>
+                            <td className="px-4 py-3 text-slate-600">
+                              {record.clinicLocation}
+                            </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center justify-center gap-2">
                                 {canView && (
@@ -1541,7 +1825,12 @@ const Clinic = () => {
                                 )}
                                 {canEdit && (
                                   <button
-                                    onClick={() => handleEdit(record)}
+                                    onClick={() =>
+                                      handleEdit({
+                                        ...record,
+                                        empCode: record.empCode,
+                                      })
+                                    }
                                     title="Edit"
                                     className="flex items-center justify-center w-8 h-8 text-xs text-teal-500 transition-colors rounded-lg bg-teal-50 hover:bg-teal-100"
                                   >

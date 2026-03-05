@@ -1,13 +1,267 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  getStudentListForPrinting,
+  downloadIDCards,
+} from "../../../API/TicketAPI";
 
+// ─── Loading Overlay ────────────────────────────────────────────────────────
+const LoadingOverlay = ({ message, subMessage }) => (
+  <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black bg-opacity-50">
+    <div className="bg-white rounded-2xl shadow-2xl px-10 py-8 flex flex-col items-center gap-4 min-w-[300px]">
+      <div className="relative flex items-center justify-center w-16 h-16">
+        <div className="absolute inset-0 border-4 border-blue-100 rounded-full" />
+        <div className="absolute inset-0 border-4 rounded-full border-t-blue-600 animate-spin" />
+        <i className="text-xl text-blue-600 fas fa-id-card" />
+      </div>
+      <div className="text-center">
+        <p className="text-base font-semibold text-gray-800">{message}</p>
+        {subMessage && (
+          <p className="mt-1 text-sm text-gray-500">{subMessage}</p>
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+// ─── Selectable Table ────────────────────────────────────────────────────────
+const SelectableTable = ({
+  data,
+  columns,
+  selectedIds,
+  idKey,
+  onToggleOne,
+  onToggleAll,
+  onClearAll,
+  pageSize = 10,
+}) => {
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return data.filter((row) =>
+      columns.some((col) =>
+        String(row[col.key] ?? "")
+          .toLowerCase()
+          .includes(q),
+      ),
+    );
+  }, [data, search, columns]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paged = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  const allPageSelected =
+    paged.length > 0 && paged.every((row) => selectedIds.includes(row[idKey]));
+  const somePageSelected = paged.some((row) =>
+    selectedIds.includes(row[idKey]),
+  );
+
+  const handleSearch = (e) => {
+    setSearch(e.target.value);
+    setPage(1);
+  };
+
+  const handleTogglePage = () => {
+    const pageIds = paged.map((row) => row[idKey]);
+    if (allPageSelected) {
+      onToggleAll(pageIds, false);
+    } else {
+      onToggleAll(pageIds, true);
+    }
+  };
+
+  return (
+    <div>
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-gray-200 bg-gray-50">
+        <div className="relative flex-1 min-w-[180px] max-w-sm">
+          <i className="absolute text-xs text-gray-400 transform -translate-y-1/2 fas fa-search left-3 top-1/2" />
+          <input
+            type="text"
+            value={search}
+            onChange={handleSearch}
+            placeholder="Search..."
+            className="w-full py-2 pl-8 pr-3 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <span className="flex-1 text-xs text-gray-500">
+          {filtered.length} record{filtered.length !== 1 ? "s" : ""}
+          {selectedIds.length > 0 && (
+            <span className="ml-2 font-semibold text-blue-600">
+              · {selectedIds.length} selected
+            </span>
+          )}
+        </span>
+        {selectedIds.length > 0 && (
+          <button
+            onClick={onClearAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+          >
+            <i className="fas fa-times-circle" />
+            Clear selection ({selectedIds.length})
+          </button>
+        )}
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="w-10 px-4 py-2 text-left border border-gray-300">
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  ref={(el) => {
+                    if (el)
+                      el.indeterminate = somePageSelected && !allPageSelected;
+                  }}
+                  onChange={handleTogglePage}
+                  className="w-4 h-4 cursor-pointer"
+                />
+              </th>
+              {columns.map((col) => (
+                <th
+                  key={col.key}
+                  className="px-4 py-2 font-semibold text-left text-gray-700 border border-gray-300"
+                >
+                  {col.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {paged.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={columns.length + 1}
+                  className="px-4 py-8 text-center text-gray-400"
+                >
+                  No records found
+                </td>
+              </tr>
+            ) : (
+              paged.map((row) => (
+                <tr
+                  key={row[idKey]}
+                  onClick={() => onToggleOne(row[idKey])}
+                  className={`cursor-pointer transition-colors ${
+                    selectedIds.includes(row[idKey])
+                      ? "bg-blue-50 hover:bg-blue-100"
+                      : "hover:bg-gray-50"
+                  }`}
+                >
+                  <td className="px-4 py-2 border border-gray-200">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(row[idKey])}
+                      onChange={() => onToggleOne(row[idKey])}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                  </td>
+                  {columns.map((col) => (
+                    <td
+                      key={col.key}
+                      className="px-4 py-2 text-gray-700 border border-gray-200"
+                    >
+                      {row[col.key]}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
+          <span className="text-xs text-gray-500">
+            Page {safePage} of {totalPages}
+          </span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setPage(1)}
+              disabled={safePage === 1}
+              className="px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-100"
+            >
+              <i className="fas fa-angle-double-left" />
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={safePage === 1}
+              className="px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-100"
+            >
+              <i className="fas fa-angle-left" />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(
+                (p) =>
+                  p === 1 || p === totalPages || Math.abs(p - safePage) <= 1,
+              )
+              .reduce((acc, p, idx, arr) => {
+                if (idx > 0 && p - arr[idx - 1] > 1) acc.push("...");
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((p, idx) =>
+                p === "..." ? (
+                  <span
+                    key={`ellipsis-${idx}`}
+                    className="px-2 py-1 text-xs text-gray-400"
+                  >
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p)}
+                    className={`px-2 py-1 text-xs border rounded ${
+                      p === safePage
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "border-gray-300 hover:bg-gray-100"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ),
+              )}
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage === totalPages}
+              className="px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-100"
+            >
+              <i className="fas fa-angle-right" />
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={safePage === totalPages}
+              className="px-2 py-1 text-xs border border-gray-300 rounded disabled:opacity-40 hover:bg-gray-100"
+            >
+              <i className="fas fa-angle-double-right" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 const PrintID = () => {
   const [activeSection, setActiveSection] = useState(null);
   const [selectedTeachers, setSelectedTeachers] = useState([]);
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
-  const idCardRef = useRef(null);
+  const [loadingMessage, setLoadingMessage] = useState("");
+  const [loadingSubMessage, setLoadingSubMessage] = useState("");
+  const [studentsList, setStudentsList] = useState([]);
+  const [dataLoading, setDataLoading] = useState(false);
 
-  // Sample data - Add photo URLs and staff codes
   const teachers = [
     {
       id: 1,
@@ -52,274 +306,119 @@ const PrintID = () => {
     },
   ];
 
-  const students = [
-    {
-      id: 1,
-      name: "ALICE ANDERSON",
-      grade: "10th Grade",
-      section: "A",
-      rollNo: "S2001",
-      photo: "https://via.placeholder.com/300x400/4A5568/FFFFFF?text=AA",
-    },
-    {
-      id: 2,
-      name: "BOB BENNETT",
-      grade: "10th Grade",
-      section: "A",
-      rollNo: "S2002",
-      photo: "https://via.placeholder.com/300x400/4A5568/FFFFFF?text=BB",
-    },
-    {
-      id: 3,
-      name: "CHARLIE CLARK",
-      grade: "11th Grade",
-      section: "B",
-      rollNo: "S2003",
-      photo: "https://via.placeholder.com/300x400/4A5568/FFFFFF?text=CC",
-    },
-    {
-      id: 4,
-      name: "DIANA DAVIS",
-      grade: "9th Grade",
-      section: "C",
-      rollNo: "S2004",
-      photo: "https://via.placeholder.com/300x400/4A5568/FFFFFF?text=DD",
-    },
-    {
-      id: 5,
-      name: "ETHAN EVANS",
-      grade: "12th Grade",
-      section: "A",
-      rollNo: "S2005",
-      photo: "https://via.placeholder.com/300x400/4A5568/FFFFFF?text=EE",
-    },
-  ];
+  useEffect(() => {
+    loadReferencesData();
+  }, []);
 
+  const loadReferencesData = async () => {
+    try {
+      setDataLoading(true);
+      const students = await getStudentListForPrinting();
+      setStudentsList(students);
+    } catch (error) {
+      console.error("Error loading student list:", error);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  // Toggle section — clears the OTHER section's selections automatically
   const toggleSection = (section) => {
-    setActiveSection(activeSection === section ? null : section);
+    if (activeSection === section) {
+      setActiveSection(null);
+    } else {
+      setActiveSection(section);
+      if (section === "teachers") setSelectedStudents([]);
+      if (section === "students") setSelectedTeachers([]);
+    }
   };
 
-  const handleTeacherSelect = (id) => {
+  // Teacher handlers
+  const handleTeacherSelect = (id) =>
     setSelectedTeachers((prev) =>
-      prev.includes(id) ? prev.filter((tid) => tid !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id],
     );
-  };
+  const handleBulkTeachers = (ids, add) =>
+    setSelectedTeachers((prev) =>
+      add
+        ? [...new Set([...prev, ...ids])]
+        : prev.filter((id) => !ids.includes(id)),
+    );
 
-  const handleStudentSelect = (id) => {
+  // Student handlers
+  const handleStudentSelect = (id) =>
     setSelectedStudents((prev) =>
-      prev.includes(id) ? prev.filter((sid) => sid !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
     );
-  };
+  const handleBulkStudents = (ids, add) =>
+    setSelectedStudents((prev) =>
+      add
+        ? [...new Set([...prev, ...ids])]
+        : prev.filter((id) => !ids.includes(id)),
+    );
 
-  const handleSelectAllTeachers = () => {
-    if (selectedTeachers.length === teachers.length) {
-      setSelectedTeachers([]);
-    } else {
-      setSelectedTeachers(teachers.map((t) => t.id));
-    }
-  };
+  // Download — sends selected IDs to API, handles blob response
+  const handleDownload = async () => {
+    const isTeachers = activeSection === "teachers";
+    const selectedIds = isTeachers ? selectedTeachers : selectedStudents;
 
-  const handleSelectAllStudents = () => {
-    if (selectedStudents.length === students.length) {
-      setSelectedStudents([]);
-    } else {
-      setSelectedStudents(students.map((s) => s.id));
-    }
-  };
-
-  const generateIDCard = async (person, type) => {
-    return new Promise((resolve) => {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-
-      // ID Card dimensions (1020 x 648 pixels for high quality)
-      canvas.width = 1020;
-      canvas.height = 648;
-
-      // Load logo
-      const logo = new Image();
-      logo.crossOrigin = "anonymous";
-      logo.src =
-        "https://auschool-my.sharepoint.com/personal/itsupport1_arabunityschool_ae/_layouts/15/download.aspx?UniqueId=95e0e11d-51e0-4ad4-9501-45d0a525d344&Translate=false&tempauth=v1.eyJzaXRlaWQiOiJlNDIxMTExOC1lOWQzLTRmOTItYTMzMi0zMzY0YzY2MjA3ZmMiLCJhcHBfZGlzcGxheW5hbWUiOiJUZWFjaGVyc0ltYWdlcyIsIm5hbWVpZCI6ImRjNTJkYTVhLTg4NzQtNGRmOS1hOTBlLTVhODY0OWY1MjljZkBlNTFhYTBkMy1lZWIyLTQ3ZTgtOWI3MS1mYTdlY2E3MGRkNzUiLCJhdWQiOiIwMDAwMDAwMy0wMDAwLTBmZjEtY2UwMC0wMDAwMDAwMDAwMDAvYXVzY2hvb2wtbXkuc2hhcmVwb2ludC5jb21AZTUxYWEwZDMtZWViMi00N2U4LTliNzEtZmE3ZWNhNzBkZDc1IiwiZXhwIjoiMTc2NzYwMzEwMiJ9.CkAKDGVudHJhX2NsYWltcxIwQ09IWTdjb0dFQUFhRm1NMVNHZG9SM2xpU2xWTFVGSTBSRlkzUVRoaVFWRXFBQT09CjIKCmFjdG9yYXBwaWQSJDAwMDAwMDAzLTAwMDAtMDAwMC1jMDAwLTAwMDAwMDAwMDAwMAoKCgRzbmlkEgI2NBILCJiD28epjuY-EAUaCzIwLjIwLjQ0Ljk3KixZMW5INkNWRXc4bmVUcFlnRW1QaUxMSFhuKzc4K0VwbDdBWFdXTWdUbktrPTChATgBQhCh6fUMqUAA4O7vJ9h9u-hEShBoYXNoZWRwcm9vZnRva2VuegExugEbYWxsc2l0ZXMucmVhZCBhbGxmaWxlcy5yZWFkyAEB.f0305yf-_nqwOHh-5UCADUCpDBSOBnVr2vSpwZ6w6QY&ApiVersion=2.0";
-
-      logo.onload = () => {
-        // Load photo
-        const photo = new Image();
-        photo.crossOrigin = "anonymous";
-        photo.src = person.photo;
-
-        photo.onload = () => {
-          // FRONT SIDE
-          // White background
-          ctx.fillStyle = "#FFFFFF";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-          // Green header
-          ctx.fillStyle = "#10B981";
-          ctx.fillRect(0, 0, canvas.width, 170);
-
-          // School name - left side
-          ctx.fillStyle = "#FFFFFF";
-          ctx.font = "bold 36px Arial";
-          ctx.textAlign = "left";
-          ctx.fillText("ARAB UNITY SCHOOL", 50, 75);
-
-          // Logo in center
-          ctx.drawImage(logo, 460, 25, 100, 100);
-
-          // Arabic text - right side
-          ctx.font = "bold 36px Arial";
-          ctx.textAlign = "right";
-          ctx.fillText("مدرسة الوحدة العربية", 970, 75);
-
-          // Photo on left
-          ctx.drawImage(photo, 50, 200, 300, 400);
-
-          // Name
-          ctx.fillStyle = "#000000";
-          ctx.font = "bold 48px Arial";
-          ctx.textAlign = "left";
-          ctx.fillText(person.name, 400, 280);
-
-          // Role
-          ctx.font = "italic bold 42px Arial";
-          ctx.fillText(type === "teacher" ? "TEACHER" : "STUDENT", 400, 380);
-
-          // Code
-          ctx.font = "italic 36px Arial";
-          const codeLabel =
-            type === "teacher" ? "STAFF CODE :" : "STUDENT ID :";
-          const code = type === "teacher" ? person.staffCode : person.rollNo;
-          ctx.fillText(codeLabel + "     " + code, 400, 480);
-
-          // Green lines at bottom
-          ctx.fillStyle = "#10B981";
-          ctx.fillRect(0, 530, canvas.width, 8);
-          ctx.fillRect(0, 560, canvas.width, 8);
-          ctx.fillRect(0, 590, canvas.width, 8);
-
-          // Convert front to image
-          const frontImage = canvas.toDataURL("image/jpeg", 0.95);
-
-          // BACK SIDE
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-          // White background
-          ctx.fillStyle = "#FFFFFF";
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-          // Green header
-          ctx.fillStyle = "#10B981";
-          ctx.fillRect(0, 0, canvas.width, 170);
-
-          // School name
-          ctx.fillStyle = "#FFFFFF";
-          ctx.font = "bold 36px Arial";
-          ctx.textAlign = "left";
-          ctx.fillText("ARAB UNITY SCHOOL", 50, 75);
-
-          // Logo
-          ctx.drawImage(logo, 460, 25, 100, 100);
-
-          // Arabic text
-          ctx.textAlign = "right";
-          ctx.fillText("مدرسة الوحدة العربية", 970, 75);
-
-          // Main content area - green background
-          ctx.fillStyle = "#10B981";
-          ctx.fillRect(0, 175, canvas.width, 345);
-
-          // Return text
-          ctx.fillStyle = "#FFFFFF";
-          ctx.font = "bold 32px Arial";
-          ctx.textAlign = "center";
-          ctx.fillText(
-            "If found, please return to P.O. Box 10563 Al Mizhar 1,",
-            canvas.width / 2,
-            240
-          );
-          ctx.fillText("Dubai U.A.E", canvas.width / 2, 290);
-
-          ctx.font = "28px Arial";
-          ctx.fillText(
-            "There will be a charge of AED 20 for issuing a replacement",
-            canvas.width / 2,
-            360
-          );
-          ctx.fillText(
-            "card if lost or damaged. ID card is not transferable",
-            canvas.width / 2,
-            400
-          );
-
-          // Emergency numbers at bottom
-          ctx.fillStyle = "#10B981";
-          ctx.fillRect(0, 525, canvas.width, 60);
-          ctx.fillRect(0, 600, canvas.width, 48);
-
-          ctx.fillStyle = "#FFFFFF";
-          ctx.font = "bold 32px Arial";
-          ctx.textAlign = "left";
-          ctx.fillText("Police : 999", 80, 565);
-          ctx.textAlign = "center";
-          ctx.fillText("Fire : 997", canvas.width / 2, 565);
-          ctx.textAlign = "right";
-          ctx.fillText("Ambulance : 998", canvas.width - 80, 565);
-
-          const backImage = canvas.toDataURL("image/jpeg", 0.95);
-
-          resolve({ front: frontImage, back: backImage });
-        };
-      };
-    });
-  };
-
-  const handlePrint = async () => {
-    const selectedCount =
-      activeSection === "teachers"
-        ? selectedTeachers.length
-        : selectedStudents.length;
-
-    if (selectedCount === 0) {
-      alert("Please select at least one person to print ID");
+    if (selectedIds.length === 0) {
+      alert("Please select at least one person to download ID cards.");
       return;
     }
 
-    setIsGenerating(true);
+    try {
+      setIsGenerating(true);
+      setLoadingMessage(
+        `Generating ${selectedIds.length} ID card${selectedIds.length > 1 ? "s" : ""}...`,
+      );
+      setLoadingSubMessage("Please wait, this may take a moment.");
 
-    const selectedPeople =
-      activeSection === "teachers"
-        ? teachers.filter((t) => selectedTeachers.includes(t.id))
-        : students.filter((s) => selectedStudents.includes(s.id));
+      const payload = {
+        type: isTeachers ? "teacher" : "student",
+        ids: selectedIds,
+      };
 
-    for (let person of selectedPeople) {
-      const { front, back } = await generateIDCard(
-        person,
-        activeSection === "teachers" ? "teacher" : "student"
+      // Call your API — expects a Blob (zip/PDF) or any response
+      const response = await downloadIDCards(payload);
+
+      // Handle blob download (zip or PDF)
+      if (response instanceof Blob) {
+        const url = URL.createObjectURL(response);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `ID_Cards_${isTeachers ? "Teachers" : "Students"}_${Date.now()}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      setLoadingMessage("Done!");
+      setLoadingSubMessage(
+        `${selectedIds.length} ID card${selectedIds.length > 1 ? "s" : ""} downloaded successfully.`,
       );
 
-      // Download front
-      const linkFront = document.createElement("a");
-      linkFront.download = `${person.name.replace(/\s+/g, "_")}_ID_FRONT.jpg`;
-      linkFront.href = front;
-      linkFront.click();
-
-      // Small delay between downloads
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Download back
-      const linkBack = document.createElement("a");
-      linkBack.download = `${person.name.replace(/\s+/g, "_")}_ID_BACK.jpg`;
-      linkBack.href = back;
-      linkBack.click();
-
-      // Delay before next person
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Brief success pause before closing
+      await new Promise((r) => setTimeout(r, 1200));
+    } catch (error) {
+      console.error("Error downloading ID cards:", error);
+      alert("Failed to download ID cards. Please try again.");
+    } finally {
+      setIsGenerating(false);
+      setLoadingMessage("");
+      setLoadingSubMessage("");
     }
-
-    setIsGenerating(false);
-    alert(`Generated ${selectedCount} ID card(s) successfully!`);
   };
+
+  const selectedCount =
+    activeSection === "teachers"
+      ? selectedTeachers.length
+      : selectedStudents.length;
+
+  const isDownloadDisabled =
+    isGenerating ||
+    !activeSection ||
+    (activeSection === "teachers" && selectedTeachers.length === 0) ||
+    (activeSection === "students" && selectedStudents.length === 0);
 
   return (
     <>
@@ -327,6 +426,15 @@ const PrintID = () => {
         rel="stylesheet"
         href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
       />
+
+      {/* Full-screen loading overlay */}
+      {isGenerating && (
+        <LoadingOverlay
+          message={loadingMessage}
+          subMessage={loadingSubMessage}
+        />
+      )}
+
       <div className="max-w-6xl p-6 mx-auto">
         <div className="bg-white rounded-lg shadow-lg">
           {/* Header */}
@@ -338,201 +446,145 @@ const PrintID = () => {
           </div>
 
           {/* Content */}
-          <div className="p-6">
-            {/* Teachers Section */}
-            <div className="mb-4 overflow-hidden border border-gray-200 rounded-lg">
-              <button
-                onClick={() => toggleSection("teachers")}
-                className="flex items-center justify-between w-full px-6 py-4 transition-colors bg-gray-50 hover:bg-gray-100"
-              >
-                <span className="text-lg font-semibold text-gray-700">
-                  <i className="mr-2 fas fa-chalkboard-teacher"></i>
-                  Teachers
-                </span>
-                <i
-                  className={`fas fa-chevron-down transform transition-transform duration-200 ${
-                    activeSection === "teachers" ? "rotate-180" : ""
-                  }`}
-                ></i>
-              </button>
+          {dataLoading ? (
+            <div className="flex items-center justify-center p-16 bg-white border rounded-2xl border-slate-100">
+              <i className="text-3xl text-teal-400 fa-solid fa-spinner fa-spin" />
+              <p className="ml-3 text-sm text-slate-600">Loading records...</p>
+            </div>
+          ) : (
+            <div className="p-6">
+              {/* ── Teachers Section ── */}
+              <div className="mb-4 overflow-hidden border border-gray-200 rounded-lg">
+                <button
+                  onClick={() => toggleSection("teachers")}
+                  className="flex items-center justify-between w-full px-6 py-4 transition-colors bg-gray-50 hover:bg-gray-100"
+                >
+                  <span className="flex items-center gap-2 text-lg font-semibold text-gray-700">
+                    <i className="fas fa-chalkboard-teacher"></i>
+                    Teachers
+                    {selectedTeachers.length > 0 && (
+                      <span className="px-2 py-0.5 text-xs font-bold bg-blue-600 text-white rounded-full">
+                        {selectedTeachers.length}
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    {selectedTeachers.length > 0 && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTeachers([]);
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 text-xs text-red-500 border border-red-200 rounded-md cursor-pointer bg-red-50 hover:bg-red-100"
+                      >
+                        <i className="fas fa-rotate-left" />
+                        Reset
+                      </span>
+                    )}
+                    <i
+                      className={`fas fa-chevron-down transform transition-transform duration-200 ${activeSection === "teachers" ? "rotate-180" : ""}`}
+                    />
+                  </div>
+                </button>
 
-              <div
-                className={`transition-all duration-300 ease-in-out ${
-                  activeSection === "teachers"
-                    ? "max-h-96 opacity-100"
-                    : "max-h-0 opacity-0"
-                } overflow-hidden`}
-              >
-                <div className="p-6 overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="px-4 py-2 text-left border border-gray-300">
-                          <input
-                            type="checkbox"
-                            checked={
-                              selectedTeachers.length === teachers.length
-                            }
-                            onChange={handleSelectAllTeachers}
-                            className="w-4 h-4 cursor-pointer"
-                          />
-                        </th>
-                        <th className="px-4 py-2 text-left border border-gray-300">
-                          Staff Code
-                        </th>
-                        <th className="px-4 py-2 text-left border border-gray-300">
-                          Name
-                        </th>
-                        <th className="px-4 py-2 text-left border border-gray-300">
-                          Subject
-                        </th>
-                        <th className="px-4 py-2 text-left border border-gray-300">
-                          Department
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {teachers.map((teacher) => (
-                        <tr key={teacher.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-2 border border-gray-300">
-                            <input
-                              type="checkbox"
-                              checked={selectedTeachers.includes(teacher.id)}
-                              onChange={() => handleTeacherSelect(teacher.id)}
-                              className="w-4 h-4 cursor-pointer"
-                            />
-                          </td>
-                          <td className="px-4 py-2 border border-gray-300">
-                            {teacher.staffCode}
-                          </td>
-                          <td className="px-4 py-2 border border-gray-300">
-                            {teacher.name}
-                          </td>
-                          <td className="px-4 py-2 border border-gray-300">
-                            {teacher.subject}
-                          </td>
-                          <td className="px-4 py-2 border border-gray-300">
-                            {teacher.department}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div
+                  className={`transition-all duration-300 ease-in-out ${activeSection === "teachers" ? "max-h-[9999px] opacity-100" : "max-h-0 opacity-0"} overflow-hidden`}
+                >
+                  <SelectableTable
+                    data={teachers}
+                    columns={[
+                      { key: "staffCode", label: "Staff Code" },
+                      { key: "name", label: "Name" },
+                      { key: "subject", label: "Subject" },
+                      { key: "department", label: "Department" },
+                    ]}
+                    selectedIds={selectedTeachers}
+                    idKey="id"
+                    onToggleOne={handleTeacherSelect}
+                    onToggleAll={handleBulkTeachers}
+                    onClearAll={() => setSelectedTeachers([])}
+                    pageSize={10}
+                  />
                 </div>
               </div>
-            </div>
 
-            {/* Students Section */}
-            <div className="mb-6 overflow-hidden border border-gray-200 rounded-lg">
-              <button
-                onClick={() => toggleSection("students")}
-                className="flex items-center justify-between w-full px-6 py-4 transition-colors bg-gray-50 hover:bg-gray-100"
-              >
-                <span className="text-lg font-semibold text-gray-700">
-                  <i className="mr-2 fas fa-user-graduate"></i>
-                  Students
-                </span>
-                <i
-                  className={`fas fa-chevron-down transform transition-transform duration-200 ${
-                    activeSection === "students" ? "rotate-180" : ""
-                  }`}
-                ></i>
-              </button>
+              {/* ── Students Section ── */}
+              <div className="mb-6 overflow-hidden border border-gray-200 rounded-lg">
+                <button
+                  onClick={() => toggleSection("students")}
+                  className="flex items-center justify-between w-full px-6 py-4 transition-colors bg-gray-50 hover:bg-gray-100"
+                >
+                  <span className="flex items-center gap-2 text-lg font-semibold text-gray-700">
+                    <i className="fas fa-user-graduate"></i>
+                    Students
+                    {selectedStudents.length > 0 && (
+                      <span className="px-2 py-0.5 text-xs font-bold bg-blue-600 text-white rounded-full">
+                        {selectedStudents.length}
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    {selectedStudents.length > 0 && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedStudents([]);
+                        }}
+                        className="flex items-center gap-1 px-2 py-1 text-xs text-red-500 border border-red-200 rounded-md cursor-pointer bg-red-50 hover:bg-red-100"
+                      >
+                        <i className="fas fa-rotate-left" />
+                        Reset
+                      </span>
+                    )}
+                    <i
+                      className={`fas fa-chevron-down transform transition-transform duration-200 ${activeSection === "students" ? "rotate-180" : ""}`}
+                    />
+                  </div>
+                </button>
 
-              <div
-                className={`transition-all duration-300 ease-in-out ${
-                  activeSection === "students"
-                    ? "max-h-96 opacity-100"
-                    : "max-h-0 opacity-0"
-                } overflow-hidden`}
-              >
-                <div className="p-6 overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="px-4 py-2 text-left border border-gray-300">
-                          <input
-                            type="checkbox"
-                            checked={
-                              selectedStudents.length === students.length
-                            }
-                            onChange={handleSelectAllStudents}
-                            className="w-4 h-4 cursor-pointer"
-                          />
-                        </th>
-                        <th className="px-4 py-2 text-left border border-gray-300">
-                          Student ID
-                        </th>
-                        <th className="px-4 py-2 text-left border border-gray-300">
-                          Name
-                        </th>
-                        <th className="px-4 py-2 text-left border border-gray-300">
-                          Grade
-                        </th>
-                        <th className="px-4 py-2 text-left border border-gray-300">
-                          Section
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {students.map((student) => (
-                        <tr key={student.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-2 border border-gray-300">
-                            <input
-                              type="checkbox"
-                              checked={selectedStudents.includes(student.id)}
-                              onChange={() => handleStudentSelect(student.id)}
-                              className="w-4 h-4 cursor-pointer"
-                            />
-                          </td>
-                          <td className="px-4 py-2 border border-gray-300">
-                            {student.rollNo}
-                          </td>
-                          <td className="px-4 py-2 border border-gray-300">
-                            {student.name}
-                          </td>
-                          <td className="px-4 py-2 border border-gray-300">
-                            {student.grade}
-                          </td>
-                          <td className="px-4 py-2 border border-gray-300">
-                            {student.section}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div
+                  className={`transition-all duration-300 ease-in-out ${activeSection === "students" ? "max-h-[9999px] opacity-100" : "max-h-0 opacity-0"} overflow-hidden`}
+                >
+                  <SelectableTable
+                    data={studentsList}
+                    columns={[
+                      { key: "studentIDNo", label: "Student ID" },
+                      { key: "studentName", label: "Name" },
+                      { key: "gender", label: "Gender" },
+                      { key: "department", label: "Grade" },
+                      { key: "studentClass", label: "Section" },
+                    ]}
+                    selectedIds={selectedStudents}
+                    idKey="studentIDNo"
+                    onToggleOne={handleStudentSelect}
+                    onToggleAll={handleBulkStudents}
+                    onClearAll={() => setSelectedStudents([])}
+                    pageSize={10}
+                  />
                 </div>
               </div>
-            </div>
 
-            {/* Print Button */}
-            <div className="flex justify-end">
-              <button
-                onClick={handlePrint}
-                disabled={
-                  isGenerating ||
-                  !activeSection ||
-                  (activeSection === "teachers" &&
-                    selectedTeachers.length === 0) ||
-                  (activeSection === "students" &&
-                    selectedStudents.length === 0)
-                }
-                className="flex items-center gap-2 px-6 py-3 font-semibold text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              >
-                {isGenerating ? (
-                  <>
-                    <i className="fas fa-spinner fa-spin"></i>
-                    <span>Generating IDs...</span>
-                  </>
-                ) : (
-                  <>
-                    <i className="fas fa-download"></i>
-                    <span>Download Selected IDs</span>
-                  </>
-                )}
-              </button>
+              {/* ── Action Row ── */}
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-500">
+                  {selectedCount > 0
+                    ? `${selectedCount} ${activeSection === "teachers" ? "teacher" : "student"}${selectedCount > 1 ? "s" : ""} selected`
+                    : "No selection yet"}
+                </p>
+                <button
+                  onClick={handleDownload}
+                  disabled={isDownloadDisabled}
+                  className="flex items-center gap-2 px-6 py-3 font-semibold text-white transition-colors bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  <i className="fas fa-download" />
+                  <span>
+                    Download Selected ID{selectedCount !== 1 ? "s" : ""}
+                    {selectedCount > 0 ? ` (${selectedCount})` : ""}
+                  </span>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </>

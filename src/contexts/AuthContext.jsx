@@ -30,7 +30,7 @@ export const AuthProvider = ({ children }) => {
       try {
         await api.post("/api/auth/logout");
       } catch (error) {
-        console.error("Logout error:", error);
+        //console.error("Logout error:", error);
       }
     }
 
@@ -87,6 +87,7 @@ export const AuthProvider = ({ children }) => {
               name: payload.unique_name || payload.name,
               role: payload.Role || payload.role,
               exp: payload.exp,
+              position: payload.Position,
             });
             setAuthType("admin");
 
@@ -180,12 +181,14 @@ export const AuthProvider = ({ children }) => {
       // Check if admin (has menus in response) or employee
       if (resp.data.menus && resp.data.menus.length > 0) {
         // Admin login
+
         const authUser = {
           empID: payload.UserId || payload.nameid,
           empCode: payload.nameid,
-          name: resp.data.user.name, // Use name from response
+          name: payload.unique_name || payload.name, // Use name from response
           role: resp.data.user.role,
           exp: payload.exp,
+          position: payload.Position,
         };
 
         setUser(authUser);
@@ -209,7 +212,7 @@ export const AuthProvider = ({ children }) => {
         return authUser;
       }
     } catch (error) {
-      console.error("Login error:", error);
+      // console.error("Login error:", error);
       SwalError("Error", error.response?.data || "Login failed");
       throw error;
     }

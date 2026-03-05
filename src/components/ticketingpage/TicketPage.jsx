@@ -343,8 +343,8 @@ export default function TicketPage() {
   // ----------------- Filtering & Pagination -----------------
   const filteredTickets = tickets.filter((t) =>
     [t.ticketIDNo, t.subject, t.status].some((val) =>
-      val.toString().toLowerCase().includes(searchText.toLowerCase())
-    )
+      val.toString().toLowerCase().includes(searchText.toLowerCase()),
+    ),
   );
 
   const sortedTickets = [...filteredTickets].sort((a, b) => {
@@ -366,12 +366,12 @@ export default function TicketPage() {
   const totalPages = Math.ceil(sortedTickets.length / rowsPerPage);
   const displayedTickets = sortedTickets.slice(
     (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
+    currentPage * rowsPerPage,
   );
 
   const toggleRow = (id) => {
     setExpandedRows((prev) =>
-      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id],
     );
   };
 
@@ -628,15 +628,15 @@ export default function TicketPage() {
                           const createdDate = new Date(ticket.auditDate);
                           const formattedDate = format(
                             createdDate,
-                            "MMM dd, yyyy - EEE"
+                            "MMM dd, yyyy - EEE",
                           );
                           const daysDiff = Math.floor(
-                            (Date.now() - createdDate) / (1000 * 60 * 60 * 24)
+                            (Date.now() - createdDate) / (1000 * 60 * 60 * 24),
                           );
                           const showFollowUp =
                             daysDiff >= 3 && ticket.status !== "Resolved";
                           const isExpanded = expandedRows.includes(
-                            ticket.ticketIDNo
+                            ticket.ticketIDNo,
                           );
 
                           return (

@@ -10,3 +10,13 @@ export const getReferenceLists = async () => {
     throw error.response?.data || error;
   }
 };
+
+export const getClinicReferences = async () => {
+  try {
+    const response = await api.get("api/Clinic/GetClinicReferences");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching reference lists:", error);
+    throw error.response?.data || error;
+  }
+};

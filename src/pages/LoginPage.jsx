@@ -44,7 +44,7 @@ export default function LoginPage() {
     try {
       setLoading(true);
       const result = await login(form.username, form.password, form.remember);
-      console.log("Login result:", result.menus);
+      //console.log("Login result:", result.menus);
       // Admin login
       if (result.menus !== undefined) {
         if (result.menus.length > 0) {
