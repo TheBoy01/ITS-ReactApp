@@ -376,7 +376,7 @@ const PrintID = () => {
 
       const payload = {
         type: isTeachers ? "teacher" : "student",
-        ids: selectedIds,
+        ids: selectedIds.map((id) => String(id)), // ← convert int to string
       };
 
       // Call your API — expects a Blob (zip/PDF) or any response
