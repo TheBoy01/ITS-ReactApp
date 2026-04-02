@@ -1,38 +1,35 @@
 // hooks/usePermissions.js
 import { useAuth } from "../contexts/AuthContext";
 import { useLocation } from "react-router-dom";
-
 export const usePermissions = () => {
-  const { userMenus } = useAuth();
+  const { empPages } = useAuth();
   const location = useLocation();
 
   const getMenuPermissions = (route) => {
-    // Find menu by route (check both parent and submenu)
-    for (const menu of userMenus) {
-      if (menu.route === route) {
+    for (const menu of empPages) {
+      if (menu.PageRoute === route) {
+        // ✅ PageRoute
         return {
-          canView: menu.canView,
-          canCreate: menu.canCreate,
-          canEdit: menu.canEdit,
-          canDelete: menu.canDelete,
+          canView: menu.CanView, // ✅ CanView
+          canCreate: menu.CanCreate, // ✅ CanCreate
+          canEdit: menu.CanEdit, // ✅ CanEdit
+          canDelete: menu.CanDelete, // ✅ CanDelete
         };
       }
 
-      // Check submenus
       if (menu.subMenus) {
-        const submenu = menu.subMenus.find((sub) => sub.route === route);
+        const submenu = menu.subMenus.find((sub) => sub.PageRoute === route);
         if (submenu) {
           return {
-            canView: submenu.canView,
-            canCreate: submenu.canCreate,
-            canEdit: submenu.canEdit,
-            canDelete: submenu.canDelete,
+            canView: submenu.CanView,
+            canCreate: submenu.CanCreate,
+            canEdit: submenu.CanEdit,
+            canDelete: submenu.CanDelete,
           };
         }
       }
     }
 
-    // No permissions found
     return {
       canView: false,
       canCreate: false,

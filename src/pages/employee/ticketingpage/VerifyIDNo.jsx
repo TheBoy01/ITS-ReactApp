@@ -1,16 +1,16 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { verifyUser } from "../../API/auth";
-import { useAuth } from "../../contexts/AuthContext";
+import { verifyUser } from "../../../API/auth";
+import { useAuth } from "../../../contexts/AuthContext";
 //import SkeletonVerifyIDNo from "../skeletons/SkeletonVerifyIDNo";
-import SkeletonSmallBoxes from "../skeletons/SkeletonSmallBoxes";
+import SkeletonSmallBoxes from "../../../components/skeletons/SkeletonSmallBoxes";
 import {
   SwalSuccess,
   SwalError,
   SwalWarning,
   ToastError,
   ToastSuccess,
-} from "../../utils/SwalAlert";
+} from "../../../utils/SwalAlert";
 
 export default function VerifyIDNo({ formData, handleChange }) {
   const navigate = useNavigate();
@@ -23,21 +23,23 @@ export default function VerifyIDNo({ formData, handleChange }) {
     setLoading(true);
 
     try {
+      // VerifyIDNo.jsx — just change this one line
       const response = await verifyUser(formData.IdNo, formData.EmailID);
       if (response.token) {
+        // ✅ After — token carries everything
         const loggedInUser = createToken(response.token);
         SwalSuccess("Welcome " + loggedInUser.name + "!");
       } else {
         SwalError(
           "Login Failed",
-          "Please login using your correct ID number and school email."
+          "Please login using your correct ID number and school email.",
         );
       }
     } catch (err) {
       if (err?.message === "ADMIN LOGIN") {
         SwalWarning(
           "Admin Login",
-          "Hi Admin! Please provide your credentials to login."
+          "Hi Admin! Please provide your credentials to login.",
         );
         navigate("/Admin-Login");
         return;

@@ -2,7 +2,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 const RedirectIfAuth = ({ children }) => {
-  const { user, userMenus, authType, loading } = useAuth();
+  const { user, userMenus, authType, empPages, loading } = useAuth();
 
   if (loading) {
     return (
@@ -14,26 +14,23 @@ const RedirectIfAuth = ({ children }) => {
     );
   }
 
-  // If user is authenticated
   if (user) {
-    // Admin -> redirect to first available menu
+    // Admin → redirect to first available menu
     if (authType === "admin") {
       if (userMenus && userMenus.length > 0) {
-        const firstMenu = userMenus[0].route;
-        return <Navigate to={firstMenu} replace />;
-      } else {
-        // Admin with no menus - should not have access
-        // Logout and show error, or redirect to access denied
-        return <Navigate to="/access-denied" replace />;
+        return <Navigate to={userMenus[0].route} replace />;
       }
+      return <Navigate to="/access-denied" replace />;
     }
-    // Employee -> redirect to ticket page
+
+    // ✅ Employee → redirect to first accessible page from JWT
     if (authType === "employee") {
-      return <Navigate to="/Ticket" replace />;
+      const firstPage = empPages?.find((p) => p.CanView);
+      if (!firstPage) return <Navigate to="/access-denied" replace />;
+      return <Navigate to={firstPage.PageRoute} replace />;
     }
   }
 
-  // Not authenticated, show login page
   return children;
 };
 

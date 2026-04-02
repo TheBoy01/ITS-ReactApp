@@ -1,194 +1,747 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   useReferenceData,
   GetTeacherAttainmentByTeacherID,
 } from "../../../contexts/GetDashboardRefData";
+import {
+  getTeachersPerformanceInfoList,
+  generateTPOReportAsync,
+} from "../../../API/TeacherPerformanceAPI";
 import SkeletonLargeBoxes from "../../../components/skeletons/SkeletonLargeBoxes";
-// Icons
-const SearchIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-    />
-  </svg>
-);
 
-const FilterIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-    />
-  </svg>
-);
+// ─────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────
+const ROWS_PER_PAGE_OPTIONS = [10, 25, 50];
+const REPORT_TYPES = [
+  { id: "teacher-performance", label: "1. Teacher Performance" },
+];
 
+const GRADE_KEYS = [
+  "a1",
+  "a2",
+  "b1",
+  "c1",
+  "d1",
+  "e1",
+  "f1",
+  "g1",
+  "u1",
+  "zero",
+];
+const GRADE_HEADERS = [
+  "A1",
+  "A2",
+  "B1",
+  "C1",
+  "D1",
+  "E1",
+  "F1",
+  "G1",
+  "U1",
+  "Zero",
+];
+
+const OVERVIEW_HEADERS = [
+  "Class",
+  "Subject",
+  "Topic",
+  "Observer Name",
+  "Performance Rating",
+  "Clear Progress Demo",
+  "Demand Placed",
+  "Effective Plenary",
+];
+
+const ATTAINMENT_HEADERS = [
+  "Course Name",
+  ...GRADE_HEADERS,
+  "Above Expected",
+  "Expected",
+  "Below Expected",
+];
+
+const TABLE_HEADERS = [
+  "Teacher",
+  "Subject",
+  "Department",
+  "Rating",
+  "Attendance",
+  "Status",
+  "Actions",
+];
+
+const FILTER_FIELDS = [
+  { label: "Academic Year", key: "academicYear" },
+  { label: "Term", key: "term" },
+  { label: "Department", key: "department" },
+  { label: "Subject", key: "subject" },
+  { label: "Status", key: "status" },
+];
+
+const INITIAL_FILTERS = {
+  searchTerm: "",
+  department: "All",
+  subject: "All",
+  status: "All",
+  term: "All",
+  academicYear: "All",
+};
+
+// ─────────────────────────────────────────────
+// ICONS
+// ─────────────────────────────────────────────
+const Icon = ({ name, className = "" }) => (
+  <i className={`fa-solid fa-${name} ${className}`} />
+);
+const ChevronDown = () => <Icon name="chevron-down" className="text-[10px]" />;
+const ChevronUp = () => <Icon name="chevron-up" className="text-[10px]" />;
+const ChevronLeft = () => <Icon name="chevron-left" className="text-[10px]" />;
+const ChevronRight = () => (
+  <Icon name="chevron-right" className="text-[10px]" />
+);
+const AnglesLeft = () => <Icon name="angles-left" className="text-[10px]" />;
+const AnglesRight = () => <Icon name="angles-right" className="text-[10px]" />;
 const StarIcon = ({ filled }) => (
-  <svg
-    className="w-4 h-4"
-    fill={filled ? "currentColor" : "none"}
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-    />
-  </svg>
+  <i className={`${filled ? "fa-solid" : "fa-regular"} fa-star text-sm`} />
 );
 
-const DownloadIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-    />
-  </svg>
+// ─────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────
+const renderStars = (rating) => (
+  <div className="flex items-center gap-0.5 text-yellow-500">
+    {[1, 2, 3, 4, 5].map((s) => (
+      <StarIcon key={s} filled={s <= Math.round(rating)} />
+    ))}
+  </div>
 );
 
-const EyeIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
+const getRatingName = (averageRating, referenceData) => {
+  if (!referenceData?.length) return "N/A";
+  const matched = referenceData
+    .filter((r) => r.ratingValue <= averageRating)
+    .sort((a, b) => b.ratingValue - a.ratingValue)[0];
+  return matched?.ratingName ?? "N/A";
+};
+
+const formatDate = (dateString) =>
+  new Date(dateString).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+  });
+
+const formatAcademicYear = (year) => {
+  if (year === "All" || isNaN(parseInt(year))) return year;
+  return `${year}-${parseInt(year) + 1}`;
+};
+
+const getInitials = (name = "") =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((n) => n[0]?.toUpperCase())
+    .join("");
+
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+// ─────────────────────────────────────────────
+// SHARED UI PRIMITIVES
+// ─────────────────────────────────────────────
+const Avatar = ({ name, size = "sm" }) => {
+  const sizes = { sm: "w-10 h-10 text-sm", lg: "w-20 h-20 text-2xl" };
+  return (
+    <div
+      className={`flex items-center justify-center font-semibold text-white bg-blue-600 rounded-full shrink-0 ${sizes[size]}`}
+    >
+      {getInitials(name)}
+    </div>
+  );
+};
+
+const Badge = ({ active }) => (
+  <span
+    className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${active ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800"}`}
   >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-    />
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-    />
-  </svg>
+    {active ? "Active" : "Inactive"}
+  </span>
 );
 
-const ChevronDownIcon = () => (
-  <svg
-    className="w-4 h-4"
-    fill="none"
-    stroke="currentColor"
-    viewBox="0 0 24 24"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M19 9l-7 7-7-7"
-    />
-  </svg>
+const EmptyState = ({ icon, message }) => (
+  <p className="py-6 text-center text-slate-500">
+    {icon && <i className={`fa-solid fa-${icon} mr-2`} />}
+    {message}
+  </p>
 );
 
-//Icons End
+const SelectField = ({ label, value, onChange, options, required = false }) => (
+  <div>
+    {label && (
+      <label className="block mb-1.5 text-sm font-medium text-slate-700">
+        {label}
+        {required && <span className="text-red-500 ml-1">*</span>}
+      </label>
+    )}
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
+    >
+      {options.map((o) => (
+        <option key={o.value ?? o} value={o.value ?? o}>
+          {o.label ?? o}
+        </option>
+      ))}
+    </select>
+  </div>
+);
 
-const TeachersPerformance = () => {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedDepartment, setSelectedDepartment] = useState("All");
-  const [selectedSubject, setSelectedSubject] = useState("All");
-  const [selectedStatus, setSelectedStatus] = useState("All");
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedTeacher, setSelectedTeacher] = useState(null);
-  const { TeacherPerformanceData, loading } = useReferenceData();
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isPerformanceExpanded, setIsPerformanceExpanded] = useState(false);
+// ─────────────────────────────────────────────
+// COLLAPSIBLE SECTION
+// ─────────────────────────────────────────────
+const CollapsibleSection = ({ title, children, defaultOpen = false }) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-t border-slate-200">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center justify-between w-full px-1 py-3 transition-colors rounded-lg hover:bg-slate-50"
+      >
+        <span className="font-semibold text-slate-800">{title}</span>
+        {open ? <ChevronUp /> : <ChevronDown />}
+      </button>
+      <div
+        className={`transition-all duration-300 ease-in-out overflow-hidden ${open ? "max-h-[900px] opacity-100" : "max-h-0 opacity-0"}`}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
 
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState("");
-  const [selectedTerm, setSelectedTerm] = useState("");
+// ─────────────────────────────────────────────
+// STAT CARD
+// ─────────────────────────────────────────────
+const StatCard = ({ label, value, bg, icon }) => (
+  <div className="p-6 bg-white border rounded-lg shadow border-slate-200">
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="mb-1 text-sm text-slate-600">{label}</p>
+        <p className="text-3xl font-bold text-slate-800">{value}</p>
+      </div>
+      <div
+        className={`flex items-center justify-center w-12 h-12 rounded-lg ${bg}`}
+      >
+        {icon}
+      </div>
+    </div>
+  </div>
+);
 
-  const [isStudentPerfExpanded, setIsStudentPerfExpanded] = useState(false);
-  const [loadingStudentPerf, setLoadingStudentPerf] = useState(false);
+// ─────────────────────────────────────────────
+// GENERATE REPORT BUTTON (DROPDOWN)
+// ─────────────────────────────────────────────
+const GenerateReportButton = ({ onGenerate, selectedCount, generating }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        disabled={selectedCount === 0 || generating}
+        className="flex items-center gap-2 px-4 py-2 font-medium text-white transition-colors bg-emerald-600 rounded-lg hover:bg-emerald-700 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {generating ? (
+          <i className="fa-solid fa-spinner fa-spin" />
+        ) : (
+          <i className="fa-solid fa-file-lines" />
+        )}
+        <span>{generating ? "Generating…" : "Generate Report"}</span>
+        {selectedCount > 0 && !generating && (
+          <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-white text-emerald-700 rounded-full">
+            {selectedCount}
+          </span>
+        )}
+        {!generating && <ChevronDown />}
+      </button>
+
+      {open && !generating && (
+        <div className="absolute right-0 z-50 w-56 mt-1 bg-white border rounded-lg shadow-lg border-slate-200 top-full">
+          <p className="px-3 pt-2 pb-1 text-xs font-semibold tracking-wider uppercase text-slate-500">
+            Select Report Type
+          </p>
+          {REPORT_TYPES.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => {
+                onGenerate(r);
+                setOpen(false);
+              }}
+              className="flex items-center w-full gap-2 px-3 py-2 text-sm text-left transition-colors text-slate-700 hover:bg-slate-50 last:rounded-b-lg"
+            >
+              <i className="fa-solid fa-file-lines" />
+              {r.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+// PAGINATION
+// ─────────────────────────────────────────────
+const Pagination = ({
+  currentPage,
+  totalPages,
+  rowsPerPage,
+  onPageChange,
+  onRowsChange,
+  totalItems,
+}) => {
+  const from = totalItems === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1;
+  const to = Math.min(currentPage * rowsPerPage, totalItems);
+
+  const delta = 2;
+  const pages = [];
+  for (
+    let i = Math.max(1, currentPage - delta);
+    i <= Math.min(totalPages, currentPage + delta);
+    i++
+  ) {
+    pages.push(i);
+  }
+
+  const btnBase =
+    "p-1.5 rounded hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed";
+
+  return (
+    <div className="flex flex-col items-center justify-between gap-3 px-4 py-3 bg-white border-t border-slate-200 sm:flex-row">
+      <div className="flex items-center gap-2 text-sm text-slate-600">
+        <span>Rows per page:</span>
+        <select
+          value={rowsPerPage}
+          onChange={(e) => {
+            onRowsChange(Number(e.target.value));
+            onPageChange(1);
+          }}
+          className="px-2 py-1 border rounded border-slate-300 focus:ring-2 focus:ring-blue-500"
+        >
+          {ROWS_PER_PAGE_OPTIONS.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+        <span>
+          {from}–{to} of {totalItems}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPageChange(1)}
+          disabled={currentPage === 1}
+          className={btnBase}
+          title="First page"
+        >
+          <AnglesLeft />
+        </button>
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className={btnBase}
+        >
+          <ChevronLeft />
+        </button>
+        {pages[0] > 1 && <span className="px-1 text-slate-400">…</span>}
+        {pages.map((p) => (
+          <button
+            key={p}
+            onClick={() => onPageChange(p)}
+            className={`w-8 h-8 rounded text-sm font-medium transition-colors ${p === currentPage ? "bg-blue-600 text-white" : "hover:bg-slate-100 text-slate-700"}`}
+          >
+            {p}
+          </button>
+        ))}
+        {pages[pages.length - 1] < totalPages && (
+          <span className="px-1 text-slate-400">…</span>
+        )}
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages || totalPages === 0}
+          className={btnBase}
+        >
+          <ChevronRight />
+        </button>
+        <button
+          onClick={() => onPageChange(totalPages)}
+          disabled={currentPage === totalPages || totalPages === 0}
+          className={btnBase}
+          title="Last page"
+        >
+          <AnglesRight />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+// TEACHER DETAIL MODAL
+// ─────────────────────────────────────────────
+const TeacherDetailModal = ({
+  teacher,
+  onClose,
+  tblPerformanceOverviewList,
+  refRatingList,
+  searchTermNo, // ✅ add
+  searchAcadYear,
+}) => {
+  const [loadingPerf, setLoadingPerf] = useState(false);
   const [studentPerfData, setStudentPerfData] = useState(null);
 
+  useEffect(() => {
+    const fetch_ = async () => {
+      setLoadingPerf(true);
+      try {
+        const res = await GetTeacherAttainmentByTeacherID({
+          TeacherID: teacher.empID,
+          Term: searchTermNo,
+          SchoolYear: searchAcadYear,
+        });
+        setStudentPerfData(res);
+      } catch {
+        setStudentPerfData([]);
+      } finally {
+        setLoadingPerf(false);
+      }
+    };
+    fetch_();
+  }, [teacher.empID]);
+
+  const filteredOverview = (tblPerformanceOverviewList || []).filter(
+    (a) => a.observation?.teacherIdNo === teacher.empID,
+  );
+
+  const tdClass = "px-4 py-3 border-b border-slate-200";
+  const thClass =
+    "px-4 py-3 font-semibold text-left border-b text-slate-700 border-slate-200 whitespace-nowrap";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="p-6">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-2xl font-bold text-slate-800">
+              Teacher Details
+            </h3>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-slate-100 transition-colors"
+            >
+              <i className="fa-solid fa-xmark text-lg" />
+            </button>
+          </div>
+
+          {/* Teacher Identity */}
+          <div className="flex items-center gap-4 pb-6 mb-4 border-b border-slate-200">
+            <Avatar name={teacher.empName} size="lg" />
+            <div>
+              <h4 className="text-xl font-semibold text-slate-800">
+                {teacher.empName}
+              </h4>
+              <p className="text-slate-600">{teacher.position}</p>
+              <div className="flex items-center gap-2 mt-2">
+                {renderStars(teacher.averageRating)}
+                <span className="text-sm text-slate-600">
+                  ({getRatingName(teacher.averageRating, refRatingList)})
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Joined Date */}
+          <div className="mb-4">
+            <p className="mb-1 text-sm text-slate-600">Joined Date</p>
+            <p className="font-semibold text-slate-800">
+              {formatDate(teacher.joinedDate)}
+            </p>
+          </div>
+
+          {/* Performance Comments */}
+          <CollapsibleSection title="Performance Comments">
+            <div className="pb-4">
+              {teacher.performanceManager ? (
+                <div className="pt-2 space-y-4">
+                  <div>
+                    <p className="mb-1 text-sm text-slate-600">
+                      Performance Manager
+                    </p>
+                    <p className="font-semibold text-slate-800">
+                      {teacher.performanceManager}
+                    </p>
+                  </div>
+                  {[
+                    ["Teaching Quality", teacher.teachingQuality],
+                    ["Response to Students", teacher.responseToStudents],
+                    ["Contributed to School", teacher.contribToSchool],
+                  ].map(([label, val]) => (
+                    <div key={label}>
+                      <p className="mb-1 text-sm text-slate-600">{label}</p>
+                      <p className="font-semibold text-slate-800">{val}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState message="No Data Found" />
+              )}
+            </div>
+          </CollapsibleSection>
+
+          {/* Performance Overview */}
+          <CollapsibleSection title="Performance Overview">
+            <div className="py-4 overflow-x-auto">
+              {filteredOverview.length > 0 ? (
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-slate-100">
+                      {OVERVIEW_HEADERS.map((h) => (
+                        <th key={h} className={thClass}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOverview.map((row, i) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className={tdClass}>
+                          {row.observation.class || "-"}
+                        </td>
+                        <td className={tdClass}>
+                          {row.observation.subject || "-"}
+                        </td>
+                        <td className={tdClass}>
+                          {row.observation.topic || "-"}
+                        </td>
+                        <td className={tdClass}>
+                          {row.observation.observerName || "-"}
+                        </td>
+                        <td className={tdClass}>
+                          {renderStars(row.overallRatingValue)}{" "}
+                          <span>({row.observation?.overallRating})</span>
+                        </td>
+                        <td className={tdClass}>
+                          {renderStars(row.clearProgressRatingValue)}{" "}
+                          <span>({row.observation?.clearProgressDemo})</span>
+                        </td>
+                        <td className={tdClass}>
+                          {renderStars(row.demandPlacedRatingValue)}{" "}
+                          <span>({row.observation?.demandPlaced})</span>
+                        </td>
+                        <td className={tdClass}>
+                          {renderStars(row.effectivePlenaryRatingValue)}
+                          <span>({row.observation?.effectivePlenary})</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <EmptyState message="No Data Found" />
+              )}
+            </div>
+          </CollapsibleSection>
+
+          {/* Teachers Attainment */}
+          <CollapsibleSection title="Teachers Attainment">
+            <div className="py-4">
+              {loadingPerf ? (
+                <div className="flex flex-col items-center py-10">
+                  <i className="text-3xl text-blue-400 fa-solid fa-spinner fa-spin" />
+                  <p className="mt-3 text-sm text-slate-600">
+                    Loading attainment data…
+                  </p>
+                </div>
+              ) : studentPerfData?.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-slate-100">
+                        {ATTAINMENT_HEADERS.map((h) => (
+                          <th key={h} className={thClass}>
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {studentPerfData.map((row, i) => (
+                        <tr key={i} className="hover:bg-slate-50">
+                          <td className={tdClass}>{row.courseName || "-"}</td>
+                          {GRADE_KEYS.map((k) => (
+                            <td key={k} className={`${tdClass} text-center`}>
+                              {row[k]}
+                            </td>
+                          ))}
+                          <td
+                            className={`${tdClass} text-center font-semibold text-green-600`}
+                          >
+                            {row.aboveExpected}
+                          </td>
+                          <td
+                            className={`${tdClass} text-center font-semibold text-blue-600`}
+                          >
+                            {row.expected}
+                          </td>
+                          <td
+                            className={`${tdClass} text-center font-semibold text-red-600`}
+                          >
+                            {row.belowExpected}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState message="No attainment data found" />
+              )}
+            </div>
+          </CollapsibleSection>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+// MAIN COMPONENT
+// ─────────────────────────────────────────────
+const TeachersPerformance = () => {
+  const { TeacherPerformanceData, loading } = useReferenceData();
   const {
-    teacherPerformanceInfoList = [],
-    tblPerformanceOverviewList = [],
-    RefTermScheduleList = [],
     refRatingList = [],
+    acadYearsList = [],
+    acadTermsList = [],
   } = TeacherPerformanceData;
 
-  const distinctByTerm = Array.from(
-    new Map(
-      teacherPerformanceInfoList.map((item) => [item.term, item]),
-    ).values(),
-  );
-  const distinctByAcadYear = Array.from(
-    new Map(
-      teacherPerformanceInfoList.map((item) => [item.schoolYear, item]),
-    ).values(),
-  );
-  // Get unique departments
+  // ── Data state ───────────────────────────────────────────────────────────
+  const [teacherList, setTeacherList] = useState([]);
+  const [overviewList, setOverviewList] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  // ── Search criteria ──────────────────────────────────────────────────────
+  const [searchAcadYear, setSearchAcadYear] = useState("");
+  const [searchTermNo, setSearchTermNo] = useState("");
+  const [isDirty, setIsDirty] = useState(false); // true when criteria changed after search
+
+  // ── Filters ──────────────────────────────────────────────────────────────
+  const [filters, setFiltersState] = useState(INITIAL_FILTERS);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+
+  // ── Pagination ───────────────────────────────────────────────────────────
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+
+  // ── UI state ─────────────────────────────────────────────────────────────
+  const [selectedTeacher, setSelectedTeacher] = useState(null);
+  const [selectedIDs, setSelectedIDs] = useState(new Set());
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const setFilter = (key, value) => {
+    setFiltersState((f) => ({ ...f, [key]: value }));
+    setCurrentPage(1);
+  };
+
+  // ── Search criteria change handlers ─────────────────────────────────────
+  // Mark dirty only if user already did a search (so banner doesn't show before first search)
+  const handleAcadYearChange = (val) => {
+    setSearchAcadYear(val);
+    if (hasSearched) setIsDirty(true);
+  };
+
+  const handleTermChange = (val) => {
+    setSearchTermNo(val);
+    if (hasSearched) setIsDirty(true);
+  };
+
+  // ── Derived filter options ───────────────────────────────────────────────
   const departments = [
     "All",
     ...Array.from(
       new Map(
-        teacherPerformanceInfoList.map((t) => {
-          const dep = t.department?.trim() ?? ""; // if null/undefined → ""
-          return [dep.toLowerCase(), dep]; // key for distinct, value to keep
+        teacherList.map((t) => {
+          const dep = t.department?.trim() ?? "";
+          return [dep.toLowerCase(), dep];
         }),
       ).values(),
     ).sort((a, b) => a.localeCompare(b)),
   ];
-
-  const subjects = [
-    "All",
-    ...new Set(teacherPerformanceInfoList.map((t) => t.subject)),
-  ];
-  const statuses = [
-    "All",
-    ...new Set(teacherPerformanceInfoList.map((t) => t.status)),
-  ];
-  const terms = ["All", ...new Set(distinctByTerm.map((item) => item.term))];
+  const subjects = ["All", ...new Set(teacherList.map((t) => t.subject))];
+  const statuses = ["All", ...new Set(teacherList.map((t) => t.status))];
+  const terms = ["All", ...new Set(teacherList.map((t) => t.term?.toString()))];
   const acadYears = [
     "All",
-    ...new Set(distinctByAcadYear.map((item) => item.schoolYear)),
+    ...new Set(teacherList.map((t) => t.schoolYear?.toString())),
   ];
 
-  // Filter teachers
-  const filteredTeachers = teacherPerformanceInfoList.filter((teacher) => {
+  const filterOptions = {
+    academicYear: acadYears,
+    term: terms,
+    department: departments,
+    subject: subjects,
+    status: statuses,
+  };
+
+  // ── Filtered teachers ────────────────────────────────────────────────────
+  // Fixed: only searches empID, empName, subject — case insensitive
+  const { searchTerm, department, subject, status, term, academicYear } =
+    filters;
+
+  const filteredTeachers = teacherList.filter((t) => {
+    const q = searchTerm.toLowerCase();
     const matchesSearch =
-      teacher.empID.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      teacher.empName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      teacher.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      teacher.department.toLowerCase().includes(searchTerm.toLowerCase());
+      !searchTerm ||
+      t.empID?.toLowerCase().includes(q) ||
+      t.empName?.toLowerCase().includes(q) ||
+      t.subject?.toLowerCase().includes(q);
+
     const matchesDepartment =
-      selectedDepartment === "All" || teacher.department === selectedDepartment;
-    const matchesSubject =
-      selectedSubject === "All" || teacher.subject === selectedSubject;
-    const matchesStatus =
-      selectedStatus === "All" || teacher.status === selectedStatus;
-    const matchesTerm =
-      selectedTerm === "All" || teacher.term.toString() === selectedTerm;
+      department === "All" || t.department === department;
+    const matchesSubject = subject === "All" || t.subject === subject;
+    const matchesStatus = status === "All" || t.status === status;
+    const matchesTerm = term === "All" || t.term?.toString() === term;
     const matchesAcadYear =
-      selectedAcademicYear === "All" ||
-      teacher.schoolYear.toString() === selectedAcademicYear;
+      academicYear === "All" || t.schoolYear?.toString() === academicYear;
 
     return (
       matchesSearch &&
@@ -200,126 +753,140 @@ const TeachersPerformance = () => {
     );
   });
 
-  const fetchStudentPerformance = async (teacherId) => {
-    setLoadingStudentPerf(true);
-    try {
-      const TeachersAttaintmentRatingDto = {
-        TeacherID: teacherId, // must match backend DTO property name
-      };
-      const response = await GetTeacherAttainmentByTeacherID(
-        TeachersAttaintmentRatingDto,
-      );
-      setStudentPerfData(response);
-    } catch (error) {
-      console.error("Failed to fetch student performance:", error);
-      setStudentPerfData([]);
-    } finally {
-      setLoadingStudentPerf(false);
-    }
-  };
-
-  // Calculate stats
-  const totalTeachers = filteredTeachers.length;
-  const avgRating = (
-    filteredTeachers.reduce((sum, t) => sum + t.averageRating, 0) /
-    totalTeachers
-  ).toFixed(1);
-  const avgAttendance = Math.round(
-    filteredTeachers.reduce((sum, t) => sum + t.attendance, 0) / totalTeachers,
+  // ── Pagination ───────────────────────────────────────────────────────────
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredTeachers.length / rowsPerPage),
   );
-  const totalStudents = filteredTeachers.reduce(
-    (sum, t) => sum + t.studentsCount,
-    0,
+  const safePage = Math.min(currentPage, totalPages);
+  const pageTeachers = filteredTeachers.slice(
+    (safePage - 1) * rowsPerPage,
+    safePage * rowsPerPage,
   );
 
-  const getRatingName = (averageRating, referenceData) => {
-    if (!referenceData?.length) return "N/A";
+  // ── Checkbox helpers ─────────────────────────────────────────────────────
+  const isAllPageSelected =
+    pageTeachers.length > 0 &&
+    pageTeachers.every((t) => selectedIDs.has(t.empID));
+  const isIndeterminate =
+    pageTeachers.some((t) => selectedIDs.has(t.empID)) && !isAllPageSelected;
 
-    const matchedRating = referenceData
-      .filter((r) => r.ratingValue <= averageRating)
-      .sort((a, b) => b.ratingValue - a.ratingValue)[0];
+  const toggleOne = (empID) =>
+    setSelectedIDs((prev) => {
+      const next = new Set(prev);
+      next.has(empID) ? next.delete(empID) : next.add(empID);
+      return next;
+    });
 
-    return matchedRating?.ratingName ?? "N/A";
-  };
+  const toggleAllPage = () =>
+    setSelectedIDs((prev) => {
+      const next = new Set(prev);
+      isAllPageSelected
+        ? pageTeachers.forEach((t) => next.delete(t.empID))
+        : pageTeachers.forEach((t) => next.add(t.empID));
+      return next;
+    });
 
-  const ratingName = getRatingName(avgRating, refRatingList);
-
-  const renderStars = (rating) => {
-    return (
-      <div className="flex items-center gap-1 text-yellow-500">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <StarIcon key={star} filled={star <= Math.round(rating)} />
-        ))}
-      </div>
+  const toggleSelectAll = () => {
+    setSelectedIDs(
+      selectedIDs.size === filteredTeachers.length
+        ? new Set()
+        : new Set(filteredTeachers.map((t) => t.empID)),
     );
   };
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const options = {
-      year: "numeric",
-      month: "long",
-    };
-    return date.toLocaleDateString("en-US", options);
-  };
+  // ── Summary stats ────────────────────────────────────────────────────────
+  const total = filteredTeachers.length;
+  const avgRating = total
+    ? (
+        filteredTeachers.reduce((s, t) => s + (t.averageRating ?? 0), 0) / total
+      ).toFixed(1)
+    : 0;
+  const avgAttendance = total
+    ? Math.round(
+        filteredTeachers.reduce((s, t) => s + (t.attendance ?? 0), 0) / total,
+      )
+    : 0;
+  const ratingName = getRatingName(avgRating, refRatingList);
 
-  // Function to determine current term based on current month
-  const getCurrentTerm = () => {
-    const currentMonth = new Date().getMonth() + 1; // JavaScript months are 0-indexed
+  // ── Handlers ─────────────────────────────────────────────────────────────
+  const handleSearch = async () => {
+    if (!searchTermNo) return;
 
-    for (let term of RefTermScheduleList) {
-      if (term.StartMonth <= term.EndMonth) {
-        // Normal range (e.g., Term 2: Jan-Mar, Term 3: Apr-Aug)
-        if (currentMonth >= term.StartMonth && currentMonth <= term.EndMonth) {
-          return term.TermSched;
-        }
-      } else {
-        // Wrapping range (e.g., Term 1: Sep-Dec spans year end)
-        if (currentMonth >= term.StartMonth || currentMonth <= term.EndMonth) {
-          return term.TermSched;
-        }
-      }
+    setSearching(true);
+    setHasSearched(true);
+    setIsDirty(false); // clear dirty flag on fresh search
+    setCurrentPage(1);
+    setSelectedIDs(new Set());
+    setFiltersState(INITIAL_FILTERS); // reset table filters on new search
+
+    try {
+      const response = await getTeachersPerformanceInfoList({
+        acadYear: searchAcadYear === "All" ? null : parseInt(searchAcadYear),
+        acadTerm: parseInt(searchTermNo),
+      });
+      setTeacherList(
+        Array.isArray(response?.teacherPerformanceInfoList)
+          ? response.teacherPerformanceInfoList
+          : [],
+      );
+      setOverviewList(
+        Array.isArray(response?.tblPerformanceOverviewList)
+          ? response.tblPerformanceOverviewList
+          : [],
+      );
+    } catch (error) {
+      console.error("Failed to fetch teachers:", error);
+      setTeacherList([]);
+      setOverviewList([]);
+    } finally {
+      setSearching(false);
     }
-    return 1; // Default to term 1 if not found
   };
 
-  // Function to get current academic year
-  const getCurrentAcademicYear = () => {
-    const currentDate = new Date();
-    const currentMonth = currentDate.getMonth() + 1;
-    const currentYear = currentDate.getFullYear();
-
-    // If current month is September or later, academic year starts this year
-    // Otherwise, it started last year
-    return currentMonth >= 9 ? currentYear : currentYear - 1;
+  const handleReset = () => {
+    setSearchAcadYear("");
+    setSearchTermNo("");
+    setTeacherList([]);
+    setOverviewList([]);
+    setHasSearched(false);
+    setIsDirty(false);
+    setSelectedIDs(new Set());
+    setFiltersState(INITIAL_FILTERS);
+    setCurrentPage(1);
+    setShowMoreFilters(false);
   };
 
-  // Auto-detect current term and academic year on mount
-  useEffect(() => {
-    const currentTerm = getCurrentTerm();
-    const currentAcademicYear = getCurrentAcademicYear();
+  const handleGenerateReport = async (reportType) => {
+    const empIDS = filteredTeachers
+      .filter((t) => selectedIDs.has(t.empID))
+      .map((t) => t.empID);
 
-    setSelectedTerm(currentTerm.toString());
-    setSelectedAcademicYear(currentAcademicYear.toString());
-  }, []);
+    if (empIDS.length === 0) return;
 
-  // Format academic year for display (e.g., "2024-2025")
-  const formatAcademicYear = (year) => {
-    // Handle "ALL" or non-numeric values
-    if (year === "ALL" || isNaN(parseInt(year))) {
-      return year;
+    setGenerating(true);
+    try {
+      const blob = await generateTPOReportAsync({
+        acadYear: searchAcadYear === "All" ? null : parseInt(searchAcadYear),
+        acadTerm: parseInt(searchTermNo),
+        empIDS,
+      });
+      downloadBlob(
+        blob,
+        empIDS.length > 1 ? "TPO_Reports.zip" : "TPO_Report.pdf",
+      );
+    } catch (error) {
+      console.error("Failed to generate report:", error);
+    } finally {
+      setGenerating(false);
     }
-    return `${year}-${parseInt(year) + 1}`;
   };
 
-  // Reset data when modal closes
-  const handleCloseModal = () => {
-    setSelectedTeacher(null);
-    setStudentPerfData(null);
-    setIsStudentPerfExpanded(false);
-  };
-
+  // ── Early return ─────────────────────────────────────────────────────────
   if (loading) return <SkeletonLargeBoxes />;
+
+  const isTermMissing = !searchTermNo;
+  const isAcadYearMissing = !searchAcadYear;
 
   return (
     <div className="p-6">
@@ -333,803 +900,344 @@ const TeachersPerformance = () => {
         </p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 gap-6 mb-6 md:grid-cols-2 lg:grid-cols-3">
-        <div className="p-6 bg-white border rounded-lg shadow border-slate-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="mb-1 text-sm text-slate-600">Total Teachers</p>
-              <p className="text-3xl font-bold text-slate-800">
-                {totalTeachers}
-              </p>
-            </div>
-            <div className="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-lg">
-              <svg
-                className="w-6 h-6 text-blue-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-                />
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6 bg-white border rounded-lg shadow border-slate-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="mb-1 text-sm text-slate-600">Avg Rating</p>
-              <div className="flex items-center gap-2">
-                <p className="text-3xl font-bold text-slate-800">
-                  {" "}
-                  {ratingName}
-                </p>
-                {/**  {renderStars(parseFloat(avgRating))}*/}
-              </div>
-            </div>
-            <div className="flex items-center justify-center w-12 h-12 bg-yellow-100 rounded-lg">
-              <StarIcon filled={true} />
-            </div>
-          </div>
-        </div>
-
-        <div className="p-6 bg-white border rounded-lg shadow border-slate-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="mb-1 text-sm text-slate-600">Avg Attendance</p>
-              <p className="text-3xl font-bold text-slate-800">
-                {avgAttendance}%
-              </p>
-            </div>
-            <div className="flex items-center justify-center w-12 h-12 bg-green-100 rounded-lg">
-              <svg
-                className="w-6 h-6 text-green-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-          </div>
-        </div>
-        {/*}
-        <div className="p-6 bg-white border rounded-lg shadow border-slate-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="mb-1 text-sm text-slate-600">Total Students</p>
-              <p className="text-3xl font-bold text-slate-800">
-                {totalStudents}
-              </p>
-            </div>
-            <div className="flex items-center justify-center w-12 h-12 bg-purple-100 rounded-lg">
-              <svg
-                className="w-6 h-6 text-purple-600"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                />
-              </svg>
-            </div>
-          </div>
-        </div>
-      */}
+      {/* Stat Cards */}
+      <div className="grid grid-cols-1 gap-6 mb-6 md:grid-cols-3">
+        <StatCard
+          label="Total Teachers"
+          value={total}
+          bg="bg-blue-100"
+          icon={<Icon name="user-group" className="text-xl text-blue-600" />}
+        />
+        <StatCard
+          label="Avg Rating"
+          value={ratingName}
+          bg="bg-yellow-100"
+          icon={<Icon name="star" className="text-xl text-yellow-500" />}
+        />
+        <StatCard
+          label="Avg Attendance"
+          value={`${avgAttendance}%`}
+          bg="bg-green-100"
+          icon={<Icon name="circle-check" className="text-xl text-green-600" />}
+        />
       </div>
 
-      {/* Filters and Search */}
+      {/* Search Panel */}
+      <div className="p-4 mb-3 bg-white border rounded-lg shadow border-slate-200 space-y-4">
+        <p className="text-xs font-semibold tracking-wider uppercase text-slate-400">
+          Search
+        </p>
 
-      <div className="p-4 mb-6 space-y-4 bg-white border rounded-lg shadow border-slate-200">
-        {/* TOP ROW */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
-          {/* Term & Academic Year */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:w-2/3">
-            <div>
-              <label className="block mb-2 text-sm font-medium text-slate-700">
-                Academic Year
-              </label>
-              <select
-                value={selectedAcademicYear}
-                onChange={(e) => setSelectedAcademicYear(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
-              >
-                {acadYears.map((year) => (
-                  <option key={year} value={year}>
-                    {formatAcademicYear(year)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block mb-2 text-sm font-medium text-slate-700">
-                Term
-              </label>
-              <select
-                value={selectedTerm}
-                onChange={(e) => setSelectedTerm(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
-              >
-                {terms.map((term) => (
-                  <option key={term} value={term}>
-                    {term}
-                  </option>
-                ))}
-              </select>
-            </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* Academic Year */}
+          <div>
+            <label className="block mb-1.5 text-sm font-medium text-slate-700">
+              Academic Year <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={searchAcadYear}
+              onChange={(e) => handleAcadYearChange(e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                isAcadYearMissing
+                  ? "border-red-400 bg-red-50"
+                  : "border-slate-300"
+              }`}
+            >
+              <option value="" disabled>
+                — Select a Year —
+              </option>
+              {acadYearsList.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            {isAcadYearMissing && (
+              <p className="mt-1 text-xs text-red-500">
+                Please select a year to search.
+              </p>
+            )}
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-2 lg:ml-auto">
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200"
+          {/* Term */}
+          <div>
+            <label className="block mb-1.5 text-sm font-medium text-slate-700">
+              Term <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={searchTermNo}
+              onChange={(e) => handleTermChange(e.target.value)}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                isTermMissing ? "border-red-400 bg-red-50" : "border-slate-300"
+              }`}
             >
-              <FilterIcon />
-              <span className="font-medium">More Filters</span>
-              <ChevronDownIcon />
-            </button>
-            {/*
-            <button className="flex items-center gap-2 px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700">
-              <DownloadIcon />
-              <span className="font-medium">Export</span>
-            </button>* */}
+              <option value="" disabled>
+                — Select a Term —
+              </option>
+              {acadTermsList.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            {isTermMissing && (
+              <p className="mt-1 text-xs text-red-500">
+                Please select a term to search.
+              </p>
+            )}
           </div>
         </div>
 
-        {/* SEARCH ROW */}
-        <div>
-          <div className="relative">
-            <div className="absolute -translate-y-1/2 left-3 top-1/2 text-slate-400">
-              <SearchIcon />
-            </div>
-            <input
-              type="text"
-              placeholder="Search by Teacher's ID, name, email, or subject..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full py-2 pl-10 pr-4 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
+        {/* Dirty warning banner */}
+        {isDirty && (
+          <div className="flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-800 text-sm">
+            <i className="fa-solid fa-triangle-exclamation text-amber-500 shrink-0" />
+            <span>
+              Search criteria has changed. The table below shows results from
+              the previous search. Click <strong>Search</strong> to refresh.
+            </span>
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+          <button
+            onClick={handleSearch}
+            disabled={searching || isTermMissing || isAcadYearMissing}
+            className="flex items-center gap-2 px-4 py-2 font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <Icon name="magnifying-glass" />
+            {searching ? "Searching…" : "Search"}
+          </button>
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-2 px-4 py-2 font-medium rounded-lg text-slate-700 bg-slate-100 hover:bg-slate-200"
+          >
+            <Icon name="rotate-left" />
+            Reset
+          </button>
+          <div className="ml-auto">
+            <GenerateReportButton
+              onGenerate={handleGenerateReport}
+              selectedCount={selectedIDs.size}
+              generating={generating}
             />
           </div>
         </div>
-
-        {/* EXPANDED FILTERS */}
-        {showFilters && (
-          <div className="grid grid-cols-1 gap-4 pt-4 border-t md:grid-cols-3 border-slate-200">
-            {/* Department */}
-            <div>
-              <label className="block mb-2 text-sm font-medium text-slate-700">
-                Department
-              </label>
-              <select
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
-              >
-                {departments.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Subject */}
-            <div>
-              <label className="block mb-2 text-sm font-medium text-slate-700">
-                Subject
-              </label>
-              <select
-                value={selectedSubject}
-                onChange={(e) => setSelectedSubject(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
-              >
-                {subjects.map((subject) => (
-                  <option key={subject} value={subject}>
-                    {subject}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Status */}
-            <div>
-              <label className="block mb-2 text-sm font-medium text-slate-700">
-                Status
-              </label>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
-              >
-                {statuses.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Teachers Table */}
-      <div className="overflow-hidden bg-white border rounded-lg shadow border-slate-200">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="border-b bg-slate-50 border-slate-200">
-              <tr>
-                <th className="px-4 py-3 font-semibold text-left text-slate-700">
-                  Teacher
-                </th>
-                <th className="px-4 py-3 font-semibold text-left text-slate-700">
-                  Subject
-                </th>
-                <th className="px-4 py-3 font-semibold text-left text-slate-700">
-                  Department
-                </th>
-                <th className="px-4 py-3 font-semibold text-center text-slate-700">
-                  Rating
-                </th>
-                <th className="px-4 py-3 font-semibold text-center text-slate-700">
-                  Attendance
-                </th>
-                <th className="px-4 py-3 font-semibold text-center text-slate-700">
-                  Status
-                </th>
-                <th className="px-4 py-3 font-semibold text-center text-slate-700">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTeachers.map((teacher) => {
-                //  const progressPercentage = Math.round(
-                // (teacher.classesCompleted / teacher.totalClasses) * 100
-                //  );
-                return (
-                  <tr
-                    key={teacher.empID}
-                    className="transition-colors border-b border-slate-100 hover:bg-slate-50"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center w-10 h-10 font-semibold text-white bg-blue-600 rounded-full">
-                          {teacher.empName
-                            ?.trim()
-                            .split(/\s+/)
-                            .slice(0, 2)
-                            .map((name) => name[0].toUpperCase())
-                            .join("")}
-                        </div>
-                        <div>
-                          <p className="font-medium text-slate-800">
-                            {teacher.empName}
-                          </p>
-                          <p className="text-sm text-slate-600">
-                            {teacher.position}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">
-                      {teacher.subject}
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">
-                      {teacher.department}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col items-center gap-1">
-                        {renderStars(teacher.averageRating)}
-                        {getRatingName(teacher.averageRating, refRatingList)}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className={`font-semibold ${
-                          teacher.attendance >= 95
-                            ? "text-green-600"
-                            : "text-orange-600"
-                        }`}
-                      >
-                        {teacher.attendance}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${
-                          teacher.status === "Active"
-                            ? "bg-green-100 text-green-800"
-                            : "bg-orange-100 text-orange-800"
-                        }`}
-                      >
-                        {teacher.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => setSelectedTeacher(teacher)}
-                        className="flex items-center justify-center p-2 mx-auto transition-colors rounded-lg hover:bg-slate-100"
-                        title="View Details"
-                      >
-                        <EyeIcon />
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      {/* Filter Panel */}
+      {hasSearched && !searching && (
+        <div className="p-4 mb-6 bg-white border rounded-lg shadow border-slate-200 space-y-4">
+          <p className="text-xs font-semibold tracking-wider uppercase text-slate-400">
+            Filters
+          </p>
 
-        {filteredTeachers.length === 0 && (
-          <div className="py-12 text-center">
-            <p className="text-lg text-slate-500">
-              No teachers found matching your criteria
+          <div className="relative">
+            <div className="absolute inset-y-0 left-3 flex items-center text-slate-400 pointer-events-none">
+              <Icon name="magnifying-glass" />
+            </div>
+            <input
+              type="text"
+              placeholder="Search by Teacher ID, name, or subject…"
+              value={filters.searchTerm}
+              onChange={(e) => setFilter("searchTerm", e.target.value)}
+              className="w-full py-2 pl-10 pr-4 border rounded-lg border-slate-300 focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <button
+            onClick={() => setShowMoreFilters((v) => !v)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium"
+          >
+            <Icon name="filter" />
+            {showMoreFilters ? "Less Filters" : "More Filters"}
+            {showMoreFilters ? <ChevronUp /> : <ChevronDown />}
+          </button>
+
+          {showMoreFilters && (
+            <div className="grid grid-cols-1 gap-4 pt-4 border-t md:grid-cols-4 border-slate-200">
+              {FILTER_FIELDS.map(({ label, key }) => (
+                <SelectField
+                  key={key}
+                  label={label}
+                  value={filters[key]}
+                  onChange={(v) => setFilter(key, v)}
+                  options={filterOptions[key]}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Table Area */}
+      <div className="overflow-hidden bg-white border rounded-lg shadow border-slate-200">
+        {searching && <SkeletonLargeBoxes />}
+
+        {!searching && !hasSearched && (
+          <div className="py-14 text-center text-slate-400">
+            <Icon name="magnifying-glass" className="text-3xl mb-3 block" />
+            <p className="text-sm">
+              Select your criteria above and click <strong>Search</strong> to
+              load teachers.
             </p>
           </div>
         )}
-      </div>
 
-      {/* Teacher Detail Modal */}
-      {selectedTeacher && (
-        <div className="flex items-center justify-center min-h-screen p-4 bg-slate-100">
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
-            <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-2xl font-bold text-slate-800">
-                    Teacher Details
-                  </h3>
+        {!searching && hasSearched && (
+          <>
+            {selectedIDs.size > 0 && (
+              <div className="flex items-center justify-between px-4 py-2 bg-blue-50 border-b border-blue-200">
+                <span className="text-sm text-blue-700 font-medium">
+                  {selectedIDs.size} of {filteredTeachers.length} teacher
+                  {selectedIDs.size !== 1 ? "s" : ""} selected
+                </span>
+                <div className="flex items-center gap-3">
                   <button
-                    onClick={handleCloseModal}
-                    className="p-2 transition-colors rounded-lg hover:bg-slate-100"
+                    onClick={toggleSelectAll}
+                    className="text-sm text-blue-600 hover:underline"
                   >
-                    <div
-                      className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto"
-                      onClick={(e) => e.stopPropagation()} // ← Prevent closing when clicking inside
-                    ></div>
-                    <svg
-                      className="w-6 h-6"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
+                    {selectedIDs.size === filteredTeachers.length
+                      ? "Deselect All"
+                      : "Select All"}
                   </button>
-                </div>
-
-                <div className="flex items-center gap-4 pb-6 mb-6 border-b border-slate-200">
-                  <div className="flex items-center justify-center w-20 h-20 text-2xl font-semibold text-white bg-blue-600 rounded-full">
-                    {selectedTeacher.image}
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-xl font-semibold text-slate-800">
-                      {selectedTeacher.empName}
-                    </h4>
-                    <p className="text-slate-600">{selectedTeacher.position}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      {renderStars(selectedTeacher.averageRating)}
-                      <span className="text-sm text-slate-600">
-                        ({" "}
-                        {getRatingName(
-                          selectedTeacher.averageRating,
-                          refRatingList,
-                        )}{" "}
-                        )
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Joined Date - Always Visible */}
-                <div className="pb-4 mb-6">
-                  <div className="mb-4">
-                    <p className="mb-1 text-sm text-slate-600">Joined Date</p>
-                    <p className="font-semibold text-slate-800">
-                      {formatDate(selectedTeacher.joinedDate)}
-                    </p>
-                  </div>
-
-                  {/* Performance Comments Section */}
-                  <div className="pt-4 border-t border-slate-200">
-                    <button
-                      onClick={() =>
-                        setIsPerformanceExpanded(!isPerformanceExpanded)
-                      }
-                      className="flex items-center justify-between w-full p-3 transition-colors rounded-lg hover:bg-slate-50"
-                    >
-                      <span className="font-semibold text-slate-800">
-                        Performance Comments
-                      </span>
-                      <svg
-                        className={`w-5 h-5 text-slate-600 transition-transform duration-300 ${
-                          isPerformanceExpanded ? "rotate-180" : ""
-                        }`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 9l-7 7-7-7"
-                        />
-                      </svg>
-                    </button>
-
-                    <div
-                      className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                        isPerformanceExpanded
-                          ? "max-h-[1000px] opacity-100"
-                          : "max-h-0 opacity-0"
-                      }`}
-                    >
-                      {selectedTeacher.performanceManager ? (
-                        <div className="pt-4 space-y-4">
-                          <div>
-                            <p className="mb-1 text-sm text-slate-600">
-                              Performance Manager
-                            </p>
-                            <p className="font-semibold text-slate-800">
-                              {selectedTeacher.performanceManager}
-                            </p>
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-4">
-                            <div>
-                              <p className="mb-1 text-sm text-slate-600">
-                                Teaching Quality
-                              </p>
-                              <p className="font-semibold text-slate-800">
-                                {selectedTeacher.teachingQuality}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="mb-1 text-sm text-slate-600">
-                                Response to Students
-                              </p>
-                              <p className="font-semibold text-slate-800">
-                                {selectedTeacher.responseToStudents}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="mb-1 text-sm text-slate-600">
-                                Contributed to School
-                              </p>
-                              <p className="font-semibold text-slate-800">
-                                {selectedTeacher.contribToSchool}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="py-8 text-center text-slate-500">
-                          No Data Found
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Performance Overview Section */}
-                <div className="pt-4 border-t border-slate-200">
                   <button
-                    onClick={() => setIsExpanded(!isExpanded)}
-                    className="flex items-center justify-between w-full p-3 transition-colors rounded-lg hover:bg-slate-50"
+                    onClick={() => setSelectedIDs(new Set())}
+                    className="text-sm text-slate-500 hover:underline"
                   >
-                    <span className="font-semibold text-slate-800">
-                      Performance Overview
-                    </span>
-                    <svg
-                      className={`w-5 h-5 text-slate-600 transition-transform duration-300 ${
-                        isExpanded ? "rotate-180" : ""
-                      }`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
+                    Clear
                   </button>
-
-                  <div
-                    className={`transition-all duration-300 ease-in-out ${
-                      isExpanded
-                        ? "max-h-[600px] opacity-100 overflow-y-auto"
-                        : "max-h-0 opacity-0 overflow-hidden"
-                    }`}
-                  >
-                    <div className="pt-4">
-                      {(() => {
-                        const filteredData =
-                          tblPerformanceOverviewList?.filter(
-                            (a) =>
-                              a.observation?.teacherIdNo ===
-                              selectedTeacher?.empID,
-                          ) || [];
-                        return filteredData.length > 0 ? (
-                          <div className="overflow-x-auto">
-                            <table className="w-full border-collapse">
-                              <thead>
-                                <tr className="bg-slate-100">
-                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                    Class
-                                  </th>
-                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                    Subject
-                                  </th>
-                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                    Topic
-                                  </th>
-                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                    Observer Name
-                                  </th>
-                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                    Performance Rating
-                                  </th>
-                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                    Clear Progress Demo
-                                  </th>
-                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                    Demand Placed
-                                  </th>
-                                  <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                    Effective Plenary
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {filteredData.map((row, index) => (
-                                  <tr key={index} className="hover:bg-slate-50">
-                                    <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
-                                      {row.observation.class || "-"}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
-                                      {row.observation.subject || "-"}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
-                                      {row.observation.topic || "-"}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
-                                      {row.observation.observerName || "-"}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
-                                      {renderStars(
-                                        row.overallRatingValue || "-",
-                                      )}{" "}
-                                      <span>
-                                        ({row.observation?.overallRating})
-                                      </span>
-                                    </td>
-                                    <td className="max-w-xs px-4 py-3 text-sm border-b text-slate-700 border-slate-200">
-                                      {renderStars(
-                                        row.clearProgressRatingValue || "-",
-                                      )}
-                                      <span>
-                                        ({row.observation?.clearProgressDemo})
-                                      </span>
-                                    </td>
-                                    <td className="max-w-xs px-4 py-3 text-sm border-b text-slate-700 border-slate-200">
-                                      {renderStars(
-                                        row.demandPlacedRatingValue || "-",
-                                      )}
-                                      <span>
-                                        ({row.observation?.demandPlaced})
-                                      </span>
-                                    </td>
-                                    <td className="max-w-xs px-4 py-3 text-sm border-b text-slate-700 border-slate-200">
-                                      {renderStars(
-                                        row.effectivePlenaryRatingValue || "-",
-                                      )}
-                                      <span>
-                                        ({row.observation?.effectivePlenary})
-                                      </span>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        ) : (
-                          <div className="py-8 text-center text-slate-500">
-                            No Data Found
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                </div>
-
-                {/* NEW: Teachers attaintment Section */}
-                <div className="pt-4 border-t border-slate-200">
-                  <button
-                    onClick={() => {
-                      setIsStudentPerfExpanded(!isStudentPerfExpanded);
-                      // Fetch data when expanding
-                      if (!isStudentPerfExpanded && !studentPerfData) {
-                        fetchStudentPerformance(selectedTeacher.empID);
-                      }
-                    }}
-                    className="flex items-center justify-between w-full p-3 transition-colors rounded-lg hover:bg-slate-50"
-                  >
-                    <span className="font-semibold text-slate-800">
-                      Teachers Attaintment
-                    </span>
-                    <svg
-                      className={`w-5 h-5 text-slate-600 transition-transform duration-300 ${
-                        isStudentPerfExpanded ? "rotate-180" : ""
-                      }`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 9l-7 7-7-7"
-                      />
-                    </svg>
-                  </button>
-
-                  <div
-                    className={`transition-all duration-300 ease-in-out ${
-                      isStudentPerfExpanded
-                        ? "max-h-[800px] opacity-100 overflow-y-auto"
-                        : "max-h-0 opacity-0 overflow-hidden"
-                    }`}
-                  >
-                    <div className="pt-4">
-                      {loadingStudentPerf ? (
-                        // Loading State
-                        <div className="flex flex-col items-center justify-center py-12">
-                          <div className="w-12 h-12 border-4 border-blue-200 rounded-full border-t-blue-600 animate-spin"></div>
-                          <p className="mt-4 text-sm text-slate-600">
-                            Loading student performance data...
-                          </p>
-                        </div>
-                      ) : studentPerfData && studentPerfData.length > 0 ? (
-                        // Data Table
-                        <div className="overflow-x-auto">
-                          <table className="w-full border-collapse">
-                            <thead>
-                              <tr className="bg-slate-100">
-                                <th className="px-4 py-3 text-sm font-semibold text-left border-b text-slate-700 border-slate-200">
-                                  Course Name
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  A1
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  A2
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  B1
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  C1
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  D1
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  E1
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  F1
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  G1
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  U1
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  Zero
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  Above Expected
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  Expected
-                                </th>
-                                <th className="px-4 py-3 text-sm font-semibold text-center border-b text-slate-700 border-slate-200">
-                                  Below Expected
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {studentPerfData.map((row, index) => (
-                                <tr key={index} className="hover:bg-slate-50">
-                                  <td className="px-4 py-3 text-sm border-b text-slate-800 border-slate-200">
-                                    {row.courseName || "-"}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
-                                    {row.a1}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
-                                    {row.a2}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
-                                    {row.b1}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
-                                    {row.c1}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
-                                    {row.d1}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
-                                    {row.e1}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
-                                    {row.f1}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
-                                    {row.g1}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
-                                    {row.u1}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm text-center border-b text-slate-800 border-slate-200">
-                                    {row.zero}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm font-semibold text-center text-green-600 border-b border-slate-200">
-                                    {row.aboveExpected}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm font-semibold text-center text-blue-600 border-b border-slate-200">
-                                    {row.expected}
-                                  </td>
-                                  <td className="px-4 py-3 text-sm font-semibold text-center text-red-600 border-b border-slate-200">
-                                    {row.belowExpected}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        // No Data State
-                        <div className="py-8 text-center text-slate-500">
-                          No teachers attaintment data found
-                        </div>
-                      )}
-                    </div>
-                  </div>
                 </div>
               </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="border-b bg-slate-50 border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 w-10">
+                      <input
+                        type="checkbox"
+                        checked={isAllPageSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = isIndeterminate;
+                        }}
+                        onChange={toggleAllPage}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 cursor-pointer"
+                      />
+                    </th>
+                    {TABLE_HEADERS.map((h, i) => (
+                      <th
+                        key={h}
+                        className={`px-4 py-3 font-semibold text-slate-700 ${i >= 3 ? "text-center" : "text-left"}`}
+                      >
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageTeachers.length > 0 ? (
+                    pageTeachers.map((teacher) => (
+                      <tr
+                        key={teacher.empID}
+                        className={`transition-colors border-b border-slate-100 hover:bg-slate-50 ${selectedIDs.has(teacher.empID) ? "bg-blue-50" : ""}`}
+                      >
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedIDs.has(teacher.empID)}
+                            onChange={() => toggleOne(teacher.empID)}
+                            className="w-4 h-4 rounded border-slate-300 text-blue-600 cursor-pointer"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar name={teacher.empName} size="sm" />
+                            <div>
+                              <p className="font-medium text-slate-800">
+                                {teacher.empName}
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                {teacher.empID}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {teacher.subject}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {teacher.department}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-col items-center gap-0.5">
+                            {renderStars(teacher.averageRating)}
+                            <span className="text-xs text-slate-500">
+                              {getRatingName(
+                                teacher.averageRating,
+                                refRatingList,
+                              )}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span
+                            className={`font-semibold ${(teacher.attendance ?? 0) >= 95 ? "text-green-600" : "text-orange-600"}`}
+                          >
+                            {teacher.attendance}%
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Badge active={teacher.status === "Active"} />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => setSelectedTeacher(teacher)}
+                            title="View Details"
+                            className="inline-flex items-center justify-center p-2 rounded-lg hover:bg-slate-100 transition-colors"
+                          >
+                            <Icon name="eye" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="py-12 text-center text-slate-500"
+                      >
+                        No teachers found matching your criteria.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-          </div>
-        </div>
+
+            <Pagination
+              currentPage={safePage}
+              totalPages={totalPages}
+              rowsPerPage={rowsPerPage}
+              totalItems={filteredTeachers.length}
+              onPageChange={setCurrentPage}
+              onRowsChange={setRowsPerPage}
+            />
+          </>
+        )}
+      </div>
+
+      {/* Detail Modal */}
+      {selectedTeacher && (
+        <TeacherDetailModal
+          teacher={selectedTeacher}
+          onClose={() => setSelectedTeacher(null)}
+          tblPerformanceOverviewList={overviewList}
+          refRatingList={refRatingList}
+          searchTermNo={searchTermNo}
+          searchAcadYear={searchAcadYear}
+        />
       )}
     </div>
   );

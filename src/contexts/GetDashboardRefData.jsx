@@ -68,6 +68,8 @@ export const GetTeacherAttainmentByTeacherID = async (
       {
         params: {
           teacherID: TeachersAttaintmentRatingDto.TeacherID,
+          term: TeachersAttaintmentRatingDto.Term,
+          schoolYear: TeachersAttaintmentRatingDto.schoolYear,
         },
       },
     );

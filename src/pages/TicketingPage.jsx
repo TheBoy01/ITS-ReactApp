@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import VerifyIDNo from "../components/ticketingpage/VerifyIDNo";
-import TicketForm from "../components/ticketingpage/TicketPage";
+import VerifyIDNo from "./employee/ticketingpage/VerifyIDNo";
+import TicketForm from "./employee/ticketingpage/TicketPage";
 import LoginPage from "./LoginPage";
 import TicketingSkeleton from "../components/skeletons/TicketingSkeleton";
 
@@ -51,7 +51,7 @@ export default function TicketingPage() {
       {/* HEADER */}
       <div className="w-full h-[10vh] bg-green-600 flex items-center justify-center px-4">
         <h1 className="text-base font-semibold text-center text-white sm:text-lg md:text-xl lg:text-2xl">
-          Welcome to the IT Ticketing of Arab Unity School
+          Welcome to Arab Unity School Employee Portal
         </h1>
       </div>
       {/* CONTENT */}

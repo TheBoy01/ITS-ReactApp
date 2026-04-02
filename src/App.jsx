@@ -1,5 +1,11 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+} from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import TicketingPage from "./pages/TicketingPage";
@@ -15,24 +21,71 @@ import TicketSupport from "./pages/admin/tickets/TicketSupport";
 import PrintID from "./pages/admin/tickets/PrintID";
 import Footer from "./components/footer/footer";
 import Clinic from "./pages/admin/clinic/Clinic";
+import TeacherObservation from "./pages/admin/maintenance/TeacherObservation";
 import AdminDefaultRedirect from "./components/redirect/AdminDefaultRedirect";
 import AccessDenied from "./pages/AccessDenied";
+import "@fortawesome/fontawesome-free/css/all.min.css";
+import EmployeeProtectedRoute from "./routes/EmployeeProtectedRoute";
+import ObservationFormPage from "./pages/employee/teacherobservationform/teacherobservationform"; // your new page
+import EmployeeLayout from "./pages/employee/layout/EmployeeLayout";
+// Ticket page inside the employee portal
+import EmployeeTicketPage from "./pages/employee/ticketingpage/TicketPage";
 
+{
+  /**
+function LocationLogger() {
+  const location = useLocation();
+  console.log("Current route →", location.pathname);
+  return null;
+}
+ */
+}
 function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <ToastContainer />
-
         {/* Full height flex container */}
         <div className="flex flex-col min-h-screen">
           {/* Main content grows to fill space */}
           <div className="flex-1">
             <Routes>
-              {/* Public routes */}
               <Route path="/" element={<Navigate to="/Ticket" replace />} />
-              <Route path="/Ticket" element={<TicketingPage />} />
+              <Route
+                path="/Ticket"
+                element={
+                  <RedirectIfAuth>
+                    <TicketingPage />
+                  </RedirectIfAuth>
+                }
+              />
 
+              {/* ✅ Employee portal */}
+              <Route path="/employee" element={<EmployeeLayout />}>
+                <Route index element={<RedirectIfAuth />} />
+                <Route
+                  path="ticketingpage/ticketpage"
+                  element={
+                    <EmployeeProtectedRoute requiredRoute="/employee/ticketingpage/ticketpage">
+                      <EmployeeTicketPage /> {/* ← renamed import */}
+                    </EmployeeProtectedRoute>
+                  }
+                />
+                <Route
+                  path="teacherobservation/observationform"
+                  element={
+                    <EmployeeProtectedRoute requiredRoute="/employee/teacherobservation/observationform">
+                      <ObservationFormPage />
+                    </EmployeeProtectedRoute>
+                  }
+                />
+                <Route
+                  index
+                  element={
+                    <Navigate to="/employee/ticketingpage/ticketpage" replace />
+                  }
+                />
+              </Route>
               <Route
                 path="/Admin-Login"
                 element={
@@ -41,7 +94,6 @@ function App() {
                   </RedirectIfAuth>
                 }
               />
-
               {/* Admin routes */}
               <Route
                 path="/admin"
@@ -113,6 +165,17 @@ function App() {
                   element={
                     <ProtectedRoute role="admin" requiredRoute="/admin/clinic">
                       <Clinic />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="maintenance/teacherobservation"
+                  element={
+                    <ProtectedRoute
+                      role="admin"
+                      requiredRoute="/admin/maintenance/teacherobservation"
+                    >
+                      <TeacherObservation />
                     </ProtectedRoute>
                   }
                 />

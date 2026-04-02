@@ -20,3 +20,13 @@ export const getClinicReferences = async () => {
     throw error.response?.data || error;
   }
 };
+
+export const getTeacherObsFormRef = async () => {
+  try {
+    const response = await api.get("api/TeacherPerformance/GetTeacherObservationRefData");
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching reference lists:", error);
+    throw error.response?.data || error;
+  }
+};

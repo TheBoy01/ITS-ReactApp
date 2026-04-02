@@ -3,47 +3,42 @@ import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../../contexts/AuthContext";
 import { SwalConfirm } from "../../../utils/SwalAlert";
 import {
-  FaHome,
-  FaTicketAlt,
+  FaHouse,
+  FaTicket,
   FaBox,
   FaUsers,
   FaChevronDown,
-  FaTimes,
-  FaSignOutAlt,
+  FaXmark,
+  FaArrowRightFromBracket,
   FaLaptopMedical,
-} from "react-icons/fa";
+  FaGears,
+  FaUsersGear,
+  FaUsersRectangle,
+  FaUserGraduate,
+} from "react-icons/fa6";
 
 const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
-  const [isITSupportOpen, setIsITSupportOpen] = useState(false);
   const { user, userMenus, authType, logout } = useAuth();
+  const [openMenus, setOpenMenus] = useState({});
 
   // Icon mapping for dynamic menus
   const iconMap = {
-    Dashboard: FaHome,
-    "IT Support": FaTicketAlt,
+    Dashboard: FaHouse,
+    "IT Support": FaTicket,
     Inventory: FaBox,
     Teachers: FaUsers,
     Clinic: FaLaptopMedical,
+    Maintenance: FaGears,
+    "Teachers Settings": FaUsersGear,
+    "Teachers Observation": FaUsersRectangle,
+    Students: FaUserGraduate,
   };
 
   // Default hardcoded menus (for employees or fallback)
   const defaultMenuItems = [
-    { path: "/admin/dashboard", label: "Dashboard", icon: FaHome },
-    {
-      path: "/admin/tickets",
-      label: "IT Support",
-      icon: FaTicketAlt,
-      submenu: [
-        { path: "/admin/tickets/ticketsupport", label: "Ticket Support" },
-        { path: "/admin/tickets/printid", label: "Print ID's" },
-        { path: "/admin/tickets/closed", label: "Closed Tickets" },
-        { path: "/admin/tickets/create", label: "Create Ticket" },
-        { path: "/admin/clinic/clinic", label: "Clinic" },
-      ],
-    },
-    { path: "/admin/inventory", label: "Inventory", icon: FaBox },
-    { path: "/admin/teachers", label: "Teachers", icon: FaUsers },
+    //If employee default menu
+    { path: "/admin/dashboard", label: "Dashboard" },
   ];
 
   // Determine which menus to show
@@ -51,6 +46,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     // If admin with menus from backend, use those
     if (authType === "admin" && userMenus && userMenus.length > 0) {
       return userMenus.map((menu) => ({
+        menuId: menu.menuId,
         path: menu.route,
         label: menu.menuName,
         icon: iconMap[menu.menuName] || FaHome,
@@ -75,8 +71,8 @@ const Sidebar = ({ isOpen, onClose }) => {
     if (ok) logout();
   };
 
-  const toggleITSupport = () => {
-    setIsITSupportOpen(!isITSupportOpen);
+  const toggleMenu = (menuId) => {
+    setOpenMenus((prev) => ({ ...prev, [menuId]: !prev[menuId] }));
   };
 
   return (
@@ -105,7 +101,7 @@ const Sidebar = ({ isOpen, onClose }) => {
             {authType === "admin" ? "AUS Dashboard" : "Employee Panel"}
           </h1>
           <button onClick={onClose} className="lg:hidden">
-            <FaTimes className="w-6 h-6" />
+            <FaXmark className="w-6 h-6" />
           </button>
         </div>
 
@@ -121,7 +117,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 {hasSubmenu ? (
                   <>
                     <button
-                      onClick={toggleITSupport}
+                      onClick={() => toggleMenu(item.menuId)}
                       className={`
                         w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg
                         transition-colors duration-200
@@ -138,7 +134,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                       </div>
                       <FaChevronDown
                         className={`w-4 h-4 transform transition-transform duration-200 ${
-                          isITSupportOpen ? "rotate-180" : ""
+                          openMenus[item.menuId] ? "rotate-180" : ""
                         }`}
                       />
                     </button>
@@ -146,9 +142,9 @@ const Sidebar = ({ isOpen, onClose }) => {
                     {/* Submenu */}
                     <div
                       className={`
-                        overflow-hidden transition-all duration-300 ease-in-out
-                        ${isITSupportOpen ? "max-h-48 mt-1" : "max-h-0"}
-                      `}
+                    overflow-hidden transition-all duration-300 ease-in-out
+                    ${openMenus[item.menuId] ? "max-h-48 mt-1" : "max-h-0"}
+                  `}
                     >
                       <div className="ml-4 space-y-1">
                         {item.submenu.map((subItem) => {
@@ -217,7 +213,7 @@ const Sidebar = ({ isOpen, onClose }) => {
             className="flex items-center w-full gap-2 px-4 py-2 transition-colors rounded-lg text-slate-300 hover:bg-slate-800"
             onClick={handleLogout}
           >
-            <FaSignOutAlt className="w-5 h-5" />
+            <FaArrowRightFromBracket className="w-5 h-5" />
             <span className="text-sm">Logout</span>
           </button>
         </div>

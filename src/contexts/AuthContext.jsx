@@ -1,9 +1,10 @@
+// contexts/AuthContext.jsx
+
 import React, {
   createContext,
   useState,
   useEffect,
   useContext,
-  useMemo,
   useCallback,
 } from "react";
 import { jwtDecode } from "jwt-decode";
@@ -17,32 +18,29 @@ export const AuthProvider = ({ children }) => {
   const [userMenus, setUserMenus] = useState([]);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [authType, setAuthType] = useState(null); // 'admin' or 'employee'
+  const [authType, setAuthType] = useState(null);
+  const [empPages, setEmpPages] = useState([]);
 
-  // Logout function
+  // ── LOGOUT ──────────────────────────────────────────────────
   const logout = useCallback(async () => {
-    // Clear localStorage and token
     localStorage.removeItem("accessToken");
+    // ✅ No more emp_pages in localStorage
     setAuthToken(null);
 
-    // Call backend logout if admin (to clear menu cache)
     if (authType === "admin") {
       try {
-        await api.post("/api/auth/logout");
-      } catch (error) {
-        //console.error("Logout error:", error);
-      }
+        await api.post("/api/Auth/logout");
+      } catch {}
     }
 
-    // Reset all state
     setUser(null);
     setUserMenus([]);
     setToken(null);
     setAuthType(null);
+    setEmpPages([]);
   }, [authType]);
 
-  // Initialize authentication on mount
-  // In your AuthContext, update checkAuth
+  // ── CHECK AUTH ON MOUNT ─────────────────────────────────────
   useEffect(() => {
     const checkAuth = async () => {
       const savedToken = localStorage.getItem("accessToken");
@@ -52,34 +50,26 @@ export const AuthProvider = ({ children }) => {
           const payload = jwtDecode(savedToken);
           const now = Date.now() / 1000;
 
-          // Check if token is expired
           if (payload.exp && payload.exp < now) {
             localStorage.removeItem("accessToken");
-            localStorage.removeItem("userMenus");
             setAuthToken(null);
             setLoading(false);
             return;
           }
 
-          // Check if token has required claims (basic tampering detection)
           if (!payload.UserId && !payload.EmpID && !payload.nameid) {
-            console.error("Invalid token - missing user identifier");
             localStorage.removeItem("accessToken");
-            localStorage.removeItem("userMenus");
             setAuthToken(null);
             setLoading(false);
             return;
           }
 
-          // Set authorization header
           setAuthToken(savedToken);
           setToken(savedToken);
 
-          // Determine if admin or employee
           const isAdmin = payload.RoleId && payload.menu;
 
           if (isAdmin) {
-            // Admin user
             setUser({
               empID: payload.UserId,
               email: payload.email,
@@ -91,17 +81,12 @@ export const AuthProvider = ({ children }) => {
             });
             setAuthType("admin");
 
-            // Fetch menus from backend (this will also validate the token)
             try {
               const response = await api.get("/api/auth/menus");
               setUserMenus(response.data);
             } catch (error) {
-              // If 401, interceptor will handle logout
-              console.error("Failed to fetch menus:", error);
               if (error.response?.status === 401) {
-                // Token is invalid - clear everything
                 localStorage.removeItem("accessToken");
-                localStorage.removeItem("userMenus");
                 setAuthToken(null);
                 setUser(null);
                 setAuthType(null);
@@ -109,21 +94,24 @@ export const AuthProvider = ({ children }) => {
               }
             }
           } else {
-            // Employee user
+            // ✅ Employee — read pages directly from JWT claim
+            const pages = payload.Pages ? JSON.parse(payload.Pages) : [];
+
             setUser({
               empID: payload.EmpID || payload.nameid,
               email: payload.email,
               name: payload.unique_name || payload.name || payload.sub,
               role: payload.Role || payload.role,
               exp: payload.exp,
+              position: payload.Position,
             });
             setAuthType("employee");
             setUserMenus([]);
+            setEmpPages(pages); // ✅ from JWT, not localStorage
           }
         } catch (error) {
           console.error("Token decode error:", error);
           localStorage.removeItem("accessToken");
-          localStorage.removeItem("userMenus");
           setAuthToken(null);
         }
       }
@@ -133,22 +121,16 @@ export const AuthProvider = ({ children }) => {
 
     checkAuth();
   }, []);
-  // Auto-logout when token expires
+
+  // ── AUTO LOGOUT ON EXPIRY ───────────────────────────────────
   useEffect(() => {
     if (!user?.exp) return;
-
     const now = Date.now() / 1000;
     const timeLeft = user.exp - now;
-
     if (timeLeft <= 0) {
-      SwalError(
-        "Session Expired",
-        "Your session has expired. Please log in again.",
-      );
       logout();
       return;
     }
-
     const timer = setTimeout(() => {
       SwalError(
         "Session Expired",
@@ -156,121 +138,88 @@ export const AuthProvider = ({ children }) => {
       );
       logout();
     }, timeLeft * 1000);
-
     return () => clearTimeout(timer);
   }, [user?.exp, logout]);
 
-  // Admin/Employee login
+  // ── ADMIN LOGIN ─────────────────────────────────────────────
   const login = useCallback(async (username, password) => {
     try {
       const resp = await api.post("/api/auth/login", { username, password });
       const token = resp.data.token;
+      if (!token) throw new Error("Token missing from response");
 
-      if (!token) {
-        throw new Error("Token missing from response");
-      }
-
-      // Store token in localStorage
       localStorage.setItem("accessToken", token);
       setAuthToken(token);
       setToken(token);
 
-      // Decode token to get user info
       const payload = jwtDecode(token);
 
-      // Check if admin (has menus in response) or employee
       if (resp.data.menus && resp.data.menus.length > 0) {
-        // Admin login
-
         const authUser = {
           empID: payload.UserId || payload.nameid,
           empCode: payload.nameid,
-          name: payload.unique_name || payload.name, // Use name from response
+          name: payload.unique_name || payload.name,
           role: resp.data.user.role,
           exp: payload.exp,
           position: payload.Position,
         };
-
         setUser(authUser);
         setUserMenus(resp.data.menus);
         setAuthType("admin");
         return authUser;
-      } else {
-        // Employee login
-        const authUser = {
-          empID: payload.EmpID || payload.nameid,
-          empCode: payload.nameid,
-          email: payload.email,
-          name: payload.unique_name || payload.name || payload.sub,
-          role: payload.Role || payload.role,
-          exp: payload.exp,
-        };
-
-        setUser(authUser);
-        setUserMenus([]);
-        setAuthType("employee");
-        return authUser;
       }
     } catch (error) {
-      // console.error("Login error:", error);
       SwalError("Error", error.response?.data || "Login failed");
       throw error;
     }
   }, []);
 
-  // Employee ID verification
+  // ── EMPLOYEE LOGIN (VerifyIDNo) ─────────────────────────────
   const createToken = useCallback((token) => {
-    try {
-      localStorage.setItem("accessToken", token);
-      setAuthToken(token);
-      setToken(token);
+    // ✅ No pages parameter — read directly from JWT
+    const decoded = jwtDecode(token);
+    const pages = decoded.Pages ? JSON.parse(decoded.Pages) : [];
 
-      const payload = jwtDecode(token);
+    const userData = {
+      empID: decoded.EmpID,
+      name: decoded.unique_name,
+      email: decoded.email,
+      position: decoded.Position,
+      role: decoded.RoleId,
+      exp: decoded.exp,
+    };
 
-      const authUser = {
-        empID: payload.EmpID || payload.nameid,
-        empCode: payload.nameid,
-        email: payload.email,
-        name: payload.unique_name || payload.name || payload.sub,
-        role: payload.Role || payload.role,
-        exp: payload.exp,
-      };
-
-      setUser(authUser);
-      setUserMenus([]);
-      setAuthType("employee");
-
-      return authUser;
-    } catch (error) {
-      console.error("Token creation error:", error);
-      throw error;
-    }
+    localStorage.setItem("accessToken", token); // ✅ only token stored
+    setAuthToken(token);
+    setToken(token);
+    setUser(userData);
+    setEmpPages(pages); // ✅ from JWT claim
+    setAuthType("employee");
+    return userData;
   }, []);
 
-  // Memoize context value
-  const value = useMemo(
-    () => ({
-      user,
-      userMenus,
-      token,
-      loading,
-      authType,
-      login,
-      createToken,
-      logout,
-    }),
-    [user, userMenus, token, loading, authType, login, createToken, logout],
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        authType,
+        userMenus,
+        token,
+        loading,
+        empPages,
+        login,
+        createToken,
+        logout,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
   );
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Custom hook
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 };
 

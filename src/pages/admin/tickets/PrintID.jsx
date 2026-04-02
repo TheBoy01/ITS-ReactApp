@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import {
   getStudentListForPrinting,
+  getEmployeesListForPrinting,
   downloadIDCards,
 } from "../../../API/TicketAPI";
 
@@ -260,52 +261,9 @@ const PrintID = () => {
   const [loadingMessage, setLoadingMessage] = useState("");
   const [loadingSubMessage, setLoadingSubMessage] = useState("");
   const [studentsList, setStudentsList] = useState([]);
+  const [empList, setEmpList] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
-
-  const teachers = [
-    {
-      id: 1,
-      name: "JOHN SMITH",
-      subject: "Mathematics",
-      department: "Science",
-      staffCode: "T1001",
-      photo:
-        "https://auschool-my.sharepoint.com/personal/itsupport1_arabunityschool_ae/_layouts/15/download.aspx?UniqueId=95e0e11d-51e0-4ad4-9501-45d0a525d344&Translate=false&tempauth=v1.eyJzaXRlaWQiOiJlNDIxMTExOC1lOWQzLTRmOTItYTMzMi0zMzY0YzY2MjA3ZmMiLCJhcHBfZGlzcGxheW5hbWUiOiJUZWFjaGVyc0ltYWdlcyIsIm5hbWVpZCI6ImRjNTJkYTVhLTg4NzQtNGRmOS1hOTBlLTVhODY0OWY1MjljZkBlNTFhYTBkMy1lZWIyLTQ3ZTgtOWI3MS1mYTdlY2E3MGRkNzUiLCJhdWQiOiIwMDAwMDAwMy0wMDAwLTBmZjEtY2UwMC0wMDAwMDAwMDAwMDAvYXVzY2hvb2wtbXkuc2hhcmVwb2ludC5jb21AZTUxYWEwZDMtZWViMi00N2U4LTliNzEtZmE3ZWNhNzBkZDc1IiwiZXhwIjoiMTc2NzYwMzEwMiJ9.CkAKDGVudHJhX2NsYWltcxIwQ09IWTdjb0dFQUFhRm1NMVNHZG9SM2xpU2xWTFVGSTBSRlkzUVRoaVFWRXFBQT09CjIKCmFjdG9yYXBwaWQSJDAwMDAwMDAzLTAwMDAtMDAwMC1jMDAwLTAwMDAwMDAwMDAwMAoKCgRzbmlkEgI2NBILCJiD28epjuY-EAUaCzIwLjIwLjQ0Ljk3KixZMW5INkNWRXc4bmVUcFlnRW1QaUxMSFhuKzc4K0VwbDdBWFdXTWdUbktrPTChATgBQhCh6fUMqUAA4O7vJ9h9u-hEShBoYXNoZWRwcm9vZnRva2VuegExugEbYWxsc2l0ZXMucmVhZCBhbGxmaWxlcy5yZWFkyAEB.f0305yf-_nqwOHh-5UCADUCpDBSOBnVr2vSpwZ6w6QY&ApiVersion=2.0",
-    },
-    {
-      id: 2,
-      name: "SARAH JOHNSON",
-      subject: "English",
-      department: "Languages",
-      staffCode: "T1002",
-      photo: "https://via.placeholder.com/300x400/4A5568/FFFFFF?text=SJ",
-    },
-    {
-      id: 3,
-      name: "MICHAEL BROWN",
-      subject: "Physics",
-      department: "Science",
-      staffCode: "T1003",
-      photo: "https://via.placeholder.com/300x400/4A5568/FFFFFF?text=MB",
-    },
-    {
-      id: 4,
-      name: "EMILY DAVIS",
-      subject: "History",
-      department: "Social Studies",
-      staffCode: "T1004",
-      photo: "https://via.placeholder.com/300x400/4A5568/FFFFFF?text=ED",
-    },
-    {
-      id: 5,
-      name: "DAVID WILSON",
-      subject: "Chemistry",
-      department: "Science",
-      staffCode: "T1005",
-      photo: "https://via.placeholder.com/300x400/4A5568/FFFFFF?text=DW",
-    },
-  ];
-
+ 
   useEffect(() => {
     loadReferencesData();
   }, []);
@@ -314,7 +272,9 @@ const PrintID = () => {
     try {
       setDataLoading(true);
       const students = await getStudentListForPrinting();
+      const employees = await getEmployeesListForPrinting();
       setStudentsList(students);
+      setEmpList(employees);
     } catch (error) {
       console.error("Error loading student list:", error);
     } finally {
@@ -491,15 +451,14 @@ const PrintID = () => {
                   className={`transition-all duration-300 ease-in-out ${activeSection === "teachers" ? "max-h-[9999px] opacity-100" : "max-h-0 opacity-0"} overflow-hidden`}
                 >
                   <SelectableTable
-                    data={teachers}
+                    data={empList}
                     columns={[
                       { key: "staffCode", label: "Staff Code" },
-                      { key: "name", label: "Name" },
-                      { key: "subject", label: "Subject" },
-                      { key: "department", label: "Department" },
+                      { key: "staffName", label: "Name" },
+                      { key: "staffPosition", label: "Position" }
                     ]}
                     selectedIds={selectedTeachers}
-                    idKey="id"
+                    idKey="staffCode"
                     onToggleOne={handleTeacherSelect}
                     onToggleAll={handleBulkTeachers}
                     onClearAll={() => setSelectedTeachers([])}

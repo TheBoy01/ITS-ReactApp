@@ -9,7 +9,7 @@ export default function AccessDenied() {
 
   const handleLogout = async () => {
     await logout();
-    navigate("/Admin-Login");
+    navigate("/Ticket");
   };
 
   return (
@@ -32,8 +32,8 @@ export default function AccessDenied() {
         </div>
         <h1 className="mb-4 text-3xl font-bold text-gray-800">Access Denied</h1>
         <p className="mb-6 text-gray-600">
-          You don't have permission to access the admin panel. Please contact
-          your administrator to request access.
+          You don't have permission to access this page. Please contact your
+          administrator to request access.
         </p>
         <button
           onClick={handleLogout}

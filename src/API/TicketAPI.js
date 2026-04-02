@@ -94,6 +94,16 @@ export const getStudentListForPrinting = async () => {
   }
 };
 
+export const getEmployeesListForPrinting = async () => {
+  try {
+    const response = await api.get("/api/Ticket/GetEmployeesListForPrinting"); // Use your actual endpoint
+    return response.data;
+  } catch (error) {
+    //  console.error("Error fetching ticket list:", error);
+    throw error;
+  }
+};
+
 export const downloadIDCards = async (payload) => {
   console.log(payload);
   const response = await api.post("/api/Ticket/DownloadIDList", payload, {
