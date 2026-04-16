@@ -27,11 +27,9 @@ export const AuthProvider = ({ children }) => {
     // ✅ No more emp_pages in localStorage
     setAuthToken(null);
 
-    if (authType === "admin") {
-      try {
-        await api.post("/api/Auth/logout");
-      } catch {}
-    }
+    try {
+      await api.post("/api/Auth/logout");
+    } catch {}
 
     setUser(null);
     setUserMenus([]);

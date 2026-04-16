@@ -1169,7 +1169,6 @@ export default function TeacherObservationForm() {
       .build();
 
     connection.on("ReceiveNewRecord", (newRecord) => {
-      console.log(newRecord);
       setSubmissions((prev) => {
         if (prev.some((s) => s.idx === newRecord.idx)) return prev;
         return [newRecord, ...prev];

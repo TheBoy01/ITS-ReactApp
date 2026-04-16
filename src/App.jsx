@@ -30,7 +30,7 @@ import ObservationFormPage from "./pages/employee/teacherobservationform/teacher
 import EmployeeLayout from "./pages/employee/layout/EmployeeLayout";
 // Ticket page inside the employee portal
 import EmployeeTicketPage from "./pages/employee/ticketingpage/TicketPage";
-
+import LateStudents from "./pages/admin/students/LateStudents";
 {
   /**
 function LocationLogger() {
@@ -176,6 +176,17 @@ function App() {
                       requiredRoute="/admin/maintenance/teacherobservation"
                     >
                       <TeacherObservation />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="students/latestudents"
+                  element={
+                    <ProtectedRoute
+                      role="admin"
+                      requiredRoute="/admin/students/latestudents"
+                    >
+                      <LateStudents />
                     </ProtectedRoute>
                   }
                 />

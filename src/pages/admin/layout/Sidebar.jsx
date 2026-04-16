@@ -43,24 +43,45 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   // Determine which menus to show
   const getMenuItems = () => {
-    // If admin with menus from backend, use those
     if (authType === "admin" && userMenus && userMenus.length > 0) {
-      return userMenus.map((menu) => ({
-        menuId: menu.menuId,
-        path: menu.route,
-        label: menu.menuName,
-        icon: iconMap[menu.menuName] || FaHome,
-        submenu:
-          menu.subMenus && menu.subMenus.length > 0
-            ? menu.subMenus.map((sub) => ({
-                path: sub.route,
-                label: sub.menuName,
-              }))
-            : null,
-      }));
+      return userMenus
+        .map((menu) => {
+          const filteredSubs =
+            menu.subMenus && menu.subMenus.length > 0
+              ? menu.subMenus.filter(
+                  (sub) =>
+                    sub.canView ||
+                    sub.canCreate ||
+                    sub.canEdit ||
+                    sub.canDelete,
+                )
+              : [];
+
+          return {
+            menuId: menu.menuId,
+            path: menu.route,
+            label: menu.menuName,
+            icon: iconMap[menu.menuName] || FaUserGraduate,
+            submenu:
+              filteredSubs.length > 0
+                ? filteredSubs.map((sub) => ({
+                    path: sub.route,
+                    label: sub.menuName,
+                  }))
+                : null,
+          };
+        })
+        .filter(
+          (item) =>
+            item.submenu !== null ||
+            userMenus.find(
+              (m) =>
+                m.route === item.path &&
+                (m.canView || m.canCreate || m.canEdit || m.canDelete),
+            ),
+        );
     }
 
-    // Otherwise use default menus (employee or no menus loaded yet)
     return defaultMenuItems;
   };
 

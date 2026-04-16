@@ -194,11 +194,47 @@ export const TaskToast = ({ tasks }) => {
 // ─────────────────────────────────────────────────────────────
 const usePermissions = () => {
   const { userMenus, loading } = useContext(AuthContext);
+
   const hasPermission = (menuName, action) => {
+    if (!userMenus || userMenus.length === 0) return false;
+
+    // ✅ 1. Try to find main menu
     const menu = userMenus.find((m) => m.menuName === menuName);
-    if (!menu) return false;
-    return menu[action];
+
+    if (menu) {
+      // check main menu permission
+      if (menu[action] !== undefined) {
+        return menu[action];
+      }
+
+      // check its submenus
+      if (menu.subMenus && menu.subMenus.length > 0) {
+        const subMatch = menu.subMenus.find((sub) => sub.menuName === menuName);
+
+        if (subMatch && subMatch[action] !== undefined) {
+          return subMatch[action];
+        }
+
+        // fallback: any submenu has permission
+        return menu.subMenus.some((sub) => sub[action] === true);
+      }
+    }
+
+    // ✅ 2. If main menu NOT found → search ALL submenus globally
+    for (const m of userMenus) {
+      if (m.subMenus && m.subMenus.length > 0) {
+        const sub = m.subMenus.find((s) => s.menuName === menuName);
+
+        if (sub && sub[action] !== undefined) {
+          return sub[action];
+        }
+      }
+    }
+
+    // ❌ 3. Nothing found
+    return false;
   };
+
   return { hasPermission, loading };
 };
 
@@ -1345,7 +1381,7 @@ const Clinic = () => {
   };
 
   return (
-    <> 
+    <>
       <link
         href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap"
         rel="stylesheet"
@@ -1363,7 +1399,7 @@ const Clinic = () => {
                 Clinic Records
               </p>
               <p className="text-[11px] text-slate-600 mt-0.5">
-                Arab Unity School
+                Manage Students/Staff Clinic Records
               </p>
             </div>
           </div>

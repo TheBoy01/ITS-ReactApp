@@ -7,16 +7,25 @@ import SkeletonLargeBoxes from "../components/skeletons/SkeletonLargeBoxes";
 function checkRouteAccess(userMenus, route) {
   for (const menu of userMenus) {
     // Check parent menu
-    if (menu.route === route && menu.canView) {
-      return true;
+    if (menu.route === route) {
+      if (menu.canView || menu.canCreate || menu.canEdit || menu.canDelete) {
+        return true;
+      }
     }
 
     // Check submenus
     if (menu.subMenus) {
-      const submenu = menu.subMenus.find(
-        (sub) => sub.route === route && sub.canView,
-      );
-      if (submenu) return true;
+      const submenu = menu.subMenus.find((sub) => sub.route === route);
+      if (submenu) {
+        if (
+          submenu.canView ||
+          submenu.canCreate ||
+          submenu.canEdit ||
+          submenu.canDelete
+        ) {
+          return true;
+        }
+      }
     }
   }
   return false;

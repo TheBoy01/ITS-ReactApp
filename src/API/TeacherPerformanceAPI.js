@@ -1,7 +1,7 @@
 import API from "./api";
 
 export const getTeachersPerformanceInfoList = async (teacherPerformanceDTO) => {
-  console.log(teacherPerformanceDTO);
+ 
   const response = await API.get(
     "/api/TeacherPerformance/GetTeachersPerformanceInfoList",
     {
@@ -89,12 +89,9 @@ export const getTeacherFilledFormListAsync = async () => {
 export const createNewRecordConnection = () => {
   const connection = new signalR.HubConnectionBuilder()
     .withUrl(`${API.defaults.baseURL}/teachersformHub`, {
-      // ✅ Allow multiple transport types as fallback
-      transport:
-        signalR.HttpTransportType.WebSockets |
-        signalR.HttpTransportType.ServerSentEvents |
-        signalR.HttpTransportType.LongPolling,
-    })
+          skipNegotiation: false,
+          transport: signalR.HttpTransportType.WebSockets,
+        })
     .withAutomaticReconnect({
       nextRetryDelayInMilliseconds: (retryContext) => {
         if (retryContext.previousRetryCount === 0) return 0;
