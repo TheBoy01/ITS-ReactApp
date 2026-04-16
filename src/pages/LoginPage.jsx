@@ -44,21 +44,48 @@ export default function LoginPage() {
     try {
       setLoading(true);
       const result = await login(form.username, form.password, form.remember);
-      //console.log("Login result:", result.menus);
-      // Admin login
       if (result.menus !== undefined) {
         if (result.menus.length > 0) {
-          // Has menus - navigate to first menu
-          navigate(result.menus[0].route, { replace: true });
+          // Find first accessible route, checking submenus
+          let firstRoute = null;
+
+          for (const menu of result.menus) {
+            if (menu.subMenus && menu.subMenus.length > 0) {
+              const firstSub = menu.subMenus.find(
+                (sub) =>
+                  sub.canView || sub.canCreate || sub.canEdit || sub.canDelete,
+              );
+              if (firstSub) {
+                firstRoute = firstSub.route;
+                break;
+              }
+            }
+            if (
+              menu.canView ||
+              menu.canCreate ||
+              menu.canEdit ||
+              menu.canDelete
+            ) {
+              firstRoute = menu.route;
+              break;
+            }
+          }
+          if (firstRoute) {
+            navigate(firstRoute, { replace: true });
+            console.log(firstRoute);
+          } else {
+            setError(
+              "You don't have access to any menus. Contact administrator.",
+            );
+            setLoading(false);
+          }
         } else {
-          // No menus - access denied
           setError(
             "You don't have access to any menus. Contact administrator.",
           );
           setLoading(false);
         }
       } else {
-        // Employee login
         navigate("/tickets", { replace: true });
       }
     } catch (err) {

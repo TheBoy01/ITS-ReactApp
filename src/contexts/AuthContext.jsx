@@ -164,7 +164,9 @@ export const AuthProvider = ({ children }) => {
         setUser(authUser);
         setUserMenus(resp.data.menus);
         setAuthType("admin");
-        return authUser;
+
+        // ← return both user and menus
+        return { ...authUser, menus: resp.data.menus };
       }
     } catch (error) {
       SwalError("Error", error.response?.data || "Login failed");

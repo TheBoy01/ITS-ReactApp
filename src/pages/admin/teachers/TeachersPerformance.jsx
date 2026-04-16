@@ -948,7 +948,7 @@ const TeachersPerformance = () => {
               </option>
               {acadYearsList.map((t) => (
                 <option key={t} value={t}>
-                  {t}
+                  {t} - {parseInt(t) + 1}
                 </option>
               ))}
             </select>

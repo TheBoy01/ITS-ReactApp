@@ -18,7 +18,25 @@ const RedirectIfAuth = ({ children }) => {
     // Admin → redirect to first available menu
     if (authType === "admin") {
       if (userMenus && userMenus.length > 0) {
-        return <Navigate to={userMenus[0].route} replace />;
+        for (const menu of userMenus) {
+          if (menu.subMenus && menu.subMenus.length > 0) {
+            const firstSub = menu.subMenus.find(
+              (sub) =>
+                sub.canView || sub.canCreate || sub.canEdit || sub.canDelete,
+            );
+            if (firstSub) {
+              return <Navigate to={firstSub.route} replace />;
+            }
+          }
+          if (
+            menu.canView ||
+            menu.canCreate ||
+            menu.canEdit ||
+            menu.canDelete
+          ) {
+            return <Navigate to={menu.route} replace />;
+          }
+        }
       }
       return <Navigate to="/access-denied" replace />;
     }
