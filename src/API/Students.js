@@ -4,18 +4,14 @@ export const createLateStudentValidation = async ({ studentNo }) => {
   try {
     const formData = new FormData();
     formData.append("StudentNo", studentNo);
-
-    // Debug - remove after fixing
-    console.log("Sending StudentNo:", studentNo, "Type:", typeof studentNo);
-    for (let [key, value] of formData.entries()) { 
-    }
-
+  
     const response = await api.post("api/Students/CreateLateStudentValidation", formData);
     return response.data;
   } catch (error) { 
     throw error.response?.data || error;
   }
 };
+
 export const createLateStudent = async ({ studentNo, remarks }) => {
   try {
     const formData = new FormData();
